@@ -10,6 +10,10 @@
 **vocaloid** is a library for the real-time reconstruction of human vocal folds using a single shot structured light system.  
 **For the version referenced in the publication, please checkout the branch [TODO].**
 
+## Dataset
+For a quick setup, we supply one video of the [TODO] dataset here in the repository.
+However, if you want to get access to the full dataset, please write us an E-Mail.
+
 ## Prerequisites
 While we supply CPU only and GPU accelerated code, we suggest to use the GPU version, which needs a CUDA capable GPU.
 
@@ -19,6 +23,7 @@ While we supply CPU only and GPU accelerated code, we suggest to use the GPU ver
 ## Usage
 *TODO*
 
+## Examples
 
 ## Citation
 If you find this work useful please use the following citation:
