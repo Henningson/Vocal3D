@@ -12,7 +12,7 @@
 
 ## Dataset
 For a quick setup, we supply one video of the [TODO] dataset here in the repository.
-However, if you want to get access to the full dataset, please write us an E-Mail.
+The dataset will be published here upon final acceptance of the paper.
 
 ## Prerequisites
 While we supply CPU only and GPU accelerated code, we suggest to use the GPU version, which needs a CUDA capable GPU.
