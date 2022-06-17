@@ -8,7 +8,7 @@
 
 # vocaloid
 **vocaloid** is a library for the real-time reconstruction of human vocal folds using a single shot structured light system.  
-**For the version referenced in the publication, please checkout the branch [TODO].**
+**The code and dataset will be made public upon final acceptance.**
 
 ## Dataset
 For a quick setup, we supply one video of the [TODO] dataset here in the repository.
