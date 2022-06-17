@@ -11,8 +11,8 @@
 **The code and dataset will be made public upon final acceptance.**
 
 ## Dataset
-For a quick setup, we supply one video of the [TODO] dataset here in the repository.
-The dataset will be published here upon final acceptance of the paper.
+The dataset is included in this repository.
+If you only want to get the dataset itself, please click [TODO].
 
 ## Prerequisites
 While we supply CPU only and GPU accelerated code, we suggest to use the GPU version, which needs a CUDA capable GPU.
