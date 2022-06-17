@@ -6,7 +6,7 @@
 ![GPL-3.0](https://img.shields.io/github/license/Henningson/vocaloid)
 
 
-# vocaloid
+# Vocal3D
 **vocaloid** is a library for the real-time reconstruction of human vocal folds using a single shot structured light system.  
 **The code and dataset will be made public upon final acceptance.**
 
