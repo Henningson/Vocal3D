@@ -15,8 +15,9 @@ The HLE Dataset described in the Paper is hosted ![here](https://github.com/Henn
 We will add it to CERNs Zenodo Platform at a later stage.
 
 ## Prerequisites
-While this library can be used without a GPU, we recommend using a CUDA capable GPU.
-A CPU only setup of this library is, as of now, untested.
+A CUDA capable GPU is recommended, but not necessary.
+However, getting PyTorch3D to work inside the Nurbs-Diff Module without CUDA may require some tinkering.
+You have been warned.
 
 ## Installation
 * Clone this repository
