@@ -8,7 +8,7 @@
 
 # Vocal3D
 **Vocal3D** is a library for the real-time reconstruction of human vocal folds using a single shot structured light system.  
-This code accompanies the paper **Real-Time 3D Reconstruction of Human Vocal Folds via High-Speed Laser-Endoscopy".
+This code accompanies the paper **Real-Time 3D Reconstruction of Human Vocal Folds via High-Speed Laser-Endoscopy**.
 
 ## Dataset
 The HLE Dataset can be found ![HERE](https://www.todo.com/).
