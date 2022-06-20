@@ -21,7 +21,7 @@ You have been warned.
 
 ## Installation
 * Clone this repository
-* Download the ![HLE Dataset](https://www.todo.com/).
+* Download the ![HLE Dataset](https://github.com/Henningson/HLEDataset.git).
 * Install PyIGL and Nurbs-Diff as explained in their respective repositories
 * Compile the ARAP Code as explained in the PybindARAP submodule
 * If you didn't receive any errors run example.py in the source subdirectory.
