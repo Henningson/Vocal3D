@@ -11,7 +11,8 @@
 This code accompanies the paper **Real-Time 3D Reconstruction of Human Vocal Folds via High-Speed Laser-Endoscopy**.
 
 ## Dataset
-The HLE Dataset descirbed in the Paper is hosted on CERN's Zenodo and can be found ![here](https://www.todo.com/).
+The HLE Dataset described in the Paper is hosted ![here](https://github.com/Henningson/HLEDataset.git) on GitHub!
+We will add it to CERNs Zenodo Platform at a later stage.
 
 ## Prerequisites
 While this library can be used without a GPU, we recommend using a CUDA capable GPU.
