@@ -8,7 +8,6 @@
 
 # Vocal3D
 **vocaloid** is a library for the real-time reconstruction of human vocal folds using a single shot structured light system.  
-**The code and dataset will be made public upon final acceptance.**
 
 ## Dataset
 The dataset is included in this repository.
