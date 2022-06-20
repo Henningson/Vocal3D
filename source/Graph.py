@@ -1,5 +1,10 @@
-class Graph(object):
+#
+#
+# Acquired at https://python-course.eu/applications-python/graphs-python.php
+# June, 20th 2022
+#
 
+class Graph(object):
     def __init__(self, graph_dict=None):
         """ initializes a graph object 
             If no dictionary or None is given, 

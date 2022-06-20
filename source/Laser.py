@@ -17,7 +17,7 @@ class Laser:
             self.setLaserDimensions(f['lsr']['lsrArrayDims'][0][0][0][0][0][0][0], f['lsr']['lsrArrayDims'][0][0][0][0][1][0][0])
         except:
             self.setLaserDimensions(18, 18)
-            print("Couldn't load Laser Dimensions, setting Laser to Size 31 x 31.")
+            print("Couldn't load Laser Dimensions, setting Laser to Size 18 x 18.")
         
         self.setRotationMatrix(f['lsr']['R'][0][0])
         self.setTranslation(f['lsr']['t'][0][0][:, 0])

@@ -1,7 +1,10 @@
 from matplotlib.pyplot import grid
 import numpy as np
 
-import AutomaticSegmentation
+import sys
+sys.path.append("..")
+
+from VocalfoldHSVSegmentation import vocalfold_segmentation
 
 from Laser import Laser
 from Camera import Camera
@@ -176,7 +179,7 @@ if __name__ == "__main__":
 
     subject = image_path.split("/")[-3]
 
-    segmentator = AutomaticSegmentation.HSVGlottisSegmentator(images[:150])
+    segmentator = vocalfold_segmentation.HSVGlottisSegmentator(images[:150])
     segmentator.generate(isSilicone=False, plot=False)
     x, w, y, h = segmentator.getROI()
     x = x+w//2 - w*2

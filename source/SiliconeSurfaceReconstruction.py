@@ -27,17 +27,11 @@ from matplotlib import cm
 
 from Laser import Laser
 
-import BSplineVisualization
-
 from sklearn.decomposition import PCA
 import visualization
-import SegmentationClicker
-import VoronoiRHC
-import Triangulation
-import Correspondences
 
 import sys
-sys.path.append("pybindarap/build/")
+sys.path.append("../PybindARAP/build/")
 import FastARAP
 
 def rotation_matrix_from_vectors(vec1, vec2):
