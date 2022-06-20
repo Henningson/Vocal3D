@@ -1,0 +1,6 @@
+[submodule "VocalfoldHSVSegmentation"]
+	path = VocalfoldHSVSegmentation
+	url = https://github.com/Henningson/VocalfoldHSVSegmentation
+[submodule "PybindARAP"]
+	path = PybindARAP
+	url = https://github.com/Henningson/PybindARAP.git
