@@ -539,29 +539,9 @@ if __name__ == "__main__":
     camera = Camera.Camera(calib_path)
     laser = Laser(calib_path, "MAT")
 
-    path_start = "/media/nu94waro/Seagate Expansion Drive/Promotion/Data/Rekonstruktion_Silikon/"
-    names = [("50_Kay", "Kay_50_-15_M2"), 
-            ("50_Kay", "Kay_50_-10_M2"),
-            ("50_Kay", "Kay_50_-5_M2"),
-            ("50_Kay", "Kay_50_0_M2"),
-            ("50_Kay", "Kay_50_5_M2"),
-            ("50_Kay", "Kay_50_10_M2"),
-            ("50_Kay", "Kay_50_15_M2"),
-            ("65_Kay", "Kay_65_M2_-15"),
-            ("65_Kay", "Kay_65_M2_-10"),
-            ("65_Kay", "Kay_65_M2_-5"),
-            ("65_Kay", "Kay_65_M2_0"),
-            ("65_Kay", "Kay_65_M2_5"),
-            ("65_Kay", "Kay_65_M2_10"),
-            ("65_Kay", "Kay_65_M2_15"),
-            ("80_Kay", "80_Kay_-15_M2_gecklickt"),
-            ("80_Kay", "80_Kay_-10_M2_gecklickt"),
-            ("80_Kay", "80_kay_-05_M2_gecklickt"),
-            ("80_Kay", "80_Kay_0_M2_gecklickt"),
-            ("80_Kay", "80_kay_05_M2_gecklickt"),
-            ("80_Kay", "80_Kay_10_M2_gecklickt"),
-            ("80_Kay", "80_Kay_15_M2_gecklickt")]
-    path_middle = "png/"
+    path_start = ""
+    names = []
+    path_middle = ""
 
 
     framesOfClosedGlottis = [38, 3, 29, 27, 9, 13, 18,
