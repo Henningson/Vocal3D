@@ -17,7 +17,6 @@ import chamfer
 import SurfaceReconstruction
 import scipy
 
-import BSplineVisualization
 import RHC
 import VoronoiRHC
 import Triangulation
@@ -29,9 +28,6 @@ import matplotlib.pyplot as plt
 import cv2
 
 from sklearn.decomposition import PCA
-
-import multiprocessing
-from multiprocessing.pool import ThreadPool
 import visualization
 
 
@@ -153,8 +149,9 @@ def generateMisalignings(grid2DPixLocations, camera, laser, height, width):
     ax.set_zlabel('Z')
     plt.show()
 
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="(Semi-)Automatic triangulation of High Speed Video of Vocal Folds")
+    parser = argparse.ArgumentParser(description="Automatic triangulation of High Speed Video of Vocal Folds")
     parser.add_argument('--calibration_file', '-c', type=str, required=True, help="Path to a calibration .MAT or .JSON File")
     parser.add_argument('--image_path', '-i', type=str, required=True, help="Path to a folder containing the Vocal Fold images.")
 
