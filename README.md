@@ -1,4 +1,4 @@
-<a href="https://www.lgdv.tf.fau.de/"><img align="right" src="lgdv_small.png"></a>
+<a href="https://www.lgdv.tf.fau.de/"><img align="right" src="images/lgdv_small.png"></a>
 
 ![Python3](https://img.shields.io/badge/python-3.5%20%7C%203.6%20%7C%203.7-blue)
 [![Language](https://img.shields.io/badge/language-C++-blue.svg)](https://isocpp.org/)
