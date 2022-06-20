@@ -11,25 +11,24 @@
 This code accompanies the paper **Real-Time 3D Reconstruction of Human Vocal Folds via High-Speed Laser-Endoscopy**.
 
 ## Dataset
-The HLE Dataset can be found ![HERE](https://www.todo.com/).
+The HLE Dataset descirbed in the Paper is hosted on CERN's Zenodo and can be found ![here](https://www.todo.com/).
 
 ## Prerequisites
-While we supply CPU only and GPU accelerated code, we suggest to use the GPU version, which needs a CUDA capable GPU.
+While this library can be used without a GPU, we recommend using a CUDA capable GPU.
+A CPU only setup of this library is, as of now, untested.
 
 ## Installation
-*TODO*
+* Clone this repository
+* Download the ![HLE Dataset](https://www.todo.com/).
+* Install PyIGL and Nurbs-Diff as explained in their respective repositories
+* Compile the ARAP Code as explained in the PybindARAP submodule
+* If you didn't receive any errors run example.py in the source subdirectory.
 
 ## Usage
 *TODO*
 
 ## Examples
 
+
 ## Citation
 If you find this work useful please use the following citation:
-*TODO*
-
-## License
-*TODO*
-
-## Acknowledgements
-*TODO*
