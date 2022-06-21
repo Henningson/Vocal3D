@@ -11,7 +11,7 @@
 This code accompanies the paper **Real-Time 3D Reconstruction of Human Vocal Folds via High-Speed Laser-Endoscopy**.
 
 ## Dataset
-The HLE Dataset described in the Paper is hosted ![here](https://github.com/Henningson/HLEDataset.git) on GitHub!
+The HLE Dataset described in the Paper is hosted ![here](https://github.com/Henningson/HLEDataset.git) on GitHub!  
 We will add it to CERNs Zenodo Platform at a later stage.
 
 ## Prerequisites
