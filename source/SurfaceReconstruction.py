@@ -15,12 +15,12 @@ from scipy.spatial import Delaunay, KDTree
 from torch_nurbs_eval.surf_eval import SurfEval
 from tqdm import tqdm
 
-import ARAP
 import helper
 import M5
 import Timer
 from Laser import Laser
 
+import ARAP
 
 def rotation_matrix_from_vectors(vec1, vec2):
     """ Find the rotation matrix that aligns vec1 to vec2
@@ -179,7 +179,9 @@ def generateARAPAnchors(vertices, points, nPointsU, glottalOutlinePoints, isLeft
                 
                 anchors[controlPointIndex] = glottalPoints[nnIndex]
 
-    return anchors
+    constrained_vertices = np.zeros(shape=(vertices.shape[0]), dtype=np.bool)
+    constrained_vertices[list(anchors.keys())] = True
+    return anchors, constrained_vertices
 
 
 # Given

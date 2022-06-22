@@ -460,7 +460,7 @@ def MeshViewer(points_left, points_right, zSubdivs):
     vertices_left = pts_left[0].reshape((-1, 3))
     vertices_right = pts_right[0].reshape((-1, 3))
 
-    viewer_app = QApplication(["VOCALOID"])
+    viewer_app = QApplication(["Vocal3D - Vocal Fold 3D Reconstruction"])
     viewer = Viewer.Viewer()
     viewer.show()
     viewer.set_column_stretch(0, 1)

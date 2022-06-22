@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 import argparse
 
 import cv2
-import ARAP
 import M5
 import helper
 import Timer
@@ -30,10 +29,9 @@ from Laser import Laser
 from sklearn.decomposition import PCA
 import visualization
 
-import sys
-sys.path.append("../PybindARAP/build/")
-import FastARAP
+import ARAP
 
+# Code from: https://stackoverflow.com/a/59204638
 def rotation_matrix_from_vectors(vec1, vec2):
     """ Find the rotation matrix that aligns vec1 to vec2
     :param vec1: A 3d "source" vector
@@ -158,7 +156,22 @@ def generateARAPAnchors(vertices, points):
 
     return anchors
 
-import Objects
+def getNeighbours(faces, numPoints):
+    neighbours = [set() for i in range(numPoints)]
+       #temp = list()
+    for face in faces:
+        neighbours[face[0]].add(face[1])
+        neighbours[face[0]].add(face[2])
+        neighbours[face[1]].add(face[0])
+        neighbours[face[1]].add(face[2])
+        neighbours[face[2]].add(face[0])
+        neighbours[face[2]].add(face[1])
+
+
+    for i in range(len(neighbours)):
+        neighbours[i] = list(neighbours[i])
+    return neighbours
+
 # Given
 # 3D Points of type NumFrames X NumPoints x 3
 # Calibrated laser object
@@ -167,6 +180,8 @@ def controlPointBasedARAP(triangulatedPoints, images, glottalmidline, zSubdivisi
     right_M5_list = []
     left_points_list = []
     right_points_list = []
+    constrained_vertices_list_left = []
+    constrained_vertices_list_right = []
     
     minX = 0
     maxX = 0
@@ -264,7 +279,6 @@ def controlPointBasedARAP(triangulatedPoints, images, glottalmidline, zSubdivisi
         pointOnPlane2 -= np.array([0.0, 0.0, zOffset])
         glottalOutlinePoints -= np.array([0.0, 0.0, zOffset])
 
-
         alignedPoints = rotateX(alignedPoints, -90)
         #alignedPoints = rotateZ(alignedPoints, 180)
         pointOnPlane1 = rotateX(pointOnPlane1, -90)
@@ -305,18 +319,20 @@ def controlPointBasedARAP(triangulatedPoints, images, glottalmidline, zSubdivisi
 
             faces_left = helper.reorder_faces(M5_Left, faces_left)
             faces_right = helper.reorder_faces(M5_Right, faces_right)
+        
+            neighbours_left = getNeighbours(faces_left, M5_Left.shape[0])
+            neighbours_right = getNeighbours(faces_right, M5_Right.shape[0])
 
         # Generate the Anchors for the ARAP-Deformation
         #left_anchors = generateARAPAnchors(M5_Left, leftPoints)
         #right_anchors = generateARAPAnchors(M5_Right, rightPoints)
         
-        left_anchors = SurfaceReconstruction.generateARAPAnchors(M5_Left, leftPoints, num_2d, glottalOutlinePoints[np.where(glottalOutlinePoints[:, 0] < 0)], isLeft=True)
-        right_anchors = SurfaceReconstruction.generateARAPAnchors(M5_Right, rightPoints, num_2d, glottalOutlinePoints[np.where(glottalOutlinePoints[:, 0] >= 0)], isLeft=False)
+        left_anchors, constrained_vertices_left = SurfaceReconstruction.generateARAPAnchors(M5_Left, leftPoints, num_2d, glottalOutlinePoints[np.where(glottalOutlinePoints[:, 0] < 0)], isLeft=True)
+        right_anchors, constrained_vertices_right = SurfaceReconstruction.generateARAPAnchors(M5_Right, rightPoints, num_2d, glottalOutlinePoints[np.where(glottalOutlinePoints[:, 0] >= 0)], isLeft=False)
 
+        constrained_vertices_list_left.append(constrained_vertices_left.tolist())
+        constrained_vertices_list_right.append(constrained_vertices_right.tolist())
 
-
-        anchors_left_list.append(left_anchors)
-        anchors_right_list.append(right_anchors)
         arap_c_left_list.append(list(left_anchors.items()))
         arap_c_right_list.append(list(right_anchors.items()))
 
@@ -356,8 +372,16 @@ def controlPointBasedARAP(triangulatedPoints, images, glottalmidline, zSubdivisi
         left_points_list.append(leftPoints)
         right_points_list.append(rightPoints)
 
-    left_M5_list = FastARAP.deform_async(np.expand_dims(np.array(M5_Left), 0).repeat(len(anchors_left_list), axis=0).tolist(), np.expand_dims(np.array(faces_left), 0).repeat(len(anchors_left_list), axis=0).tolist(), arap_c_left_list, 10000.0, 8)
-    right_M5_list = FastARAP.deform_async(np.expand_dims(np.array(M5_Right), 0).repeat(len(anchors_right_list), axis=0).tolist(), np.expand_dims(np.array(faces_right), 0).repeat(len(anchors_left_list), axis=0).tolist(), arap_c_right_list, 10000.0, 8)
+    exit()
+    copied_M5_left = np.expand_dims(np.array(M5_Left), 0).repeat(len(arap_c_left_list), axis=0)
+    copied_M5_right = np.expand_dims(np.array(M5_Right), 0).repeat(len(arap_c_left_list), axis=0)
+    copied_faces_left = np.expand_dims(np.array(faces_left), 0).repeat(len(arap_c_left_list), axis=0)
+    copied_faces_right = np.expand_dims(np.array(faces_right), 0).repeat(len(arap_c_left_list), axis=0)
+    copied_neighbours_left = [neighbours_left for i in range(len(arap_c_left_list))]
+    copied_neighbours_right = [neighbours_right for i in range(len(arap_c_left_list))]
+
+    left_M5_list = ARAP.deform_multiple(copied_M5_left.tolist(), copied_faces_left.tolist(), arap_c_left_list, constrained_vertices_list_left, copied_neighbours_left, 2, 10000.0)
+    right_M5_list = ARAP.deform_multiple(copied_M5_right.tolist(), copied_faces_right.tolist(), arap_c_right_list, constrained_vertices_list_right, copied_neighbours_right, 2, 10000.0)
 
     ARAP_timer.stop()
     print("ARAPing {0} Frames takes: {1}s".format(len(triangulatedPoints), ARAP_timer.getAverage()))
@@ -533,9 +557,29 @@ if __name__ == "__main__":
     camera = Camera.Camera(calib_path)
     laser = Laser(calib_path, "MAT")
 
-    path_start = ""
-    names = []
-    path_middle = ""
+    path_start = "/media/nu94waro/Seagate Expansion Drive/Promotion/Data/Rekonstruktion_Silikon/"
+    names = [("50_Kay", "Kay_50_-15_M2"), 
+            ("50_Kay", "Kay_50_-10_M2"),
+            ("50_Kay", "Kay_50_-5_M2"),
+            ("50_Kay", "Kay_50_0_M2"),
+            ("50_Kay", "Kay_50_5_M2"),
+            ("50_Kay", "Kay_50_10_M2"),
+            ("50_Kay", "Kay_50_15_M2"),
+            ("65_Kay", "Kay_65_M2_-15"),
+            ("65_Kay", "Kay_65_M2_-10"),
+            ("65_Kay", "Kay_65_M2_-5"),
+            ("65_Kay", "Kay_65_M2_0"),
+            ("65_Kay", "Kay_65_M2_5"),
+            ("65_Kay", "Kay_65_M2_10"),
+            ("65_Kay", "Kay_65_M2_15"),
+            ("80_Kay", "80_Kay_-15_M2_gecklickt"),
+            ("80_Kay", "80_Kay_-10_M2_gecklickt"),
+            ("80_Kay", "80_kay_-05_M2_gecklickt"),
+            ("80_Kay", "80_Kay_0_M2_gecklickt"),
+            ("80_Kay", "80_kay_05_M2_gecklickt"),
+            ("80_Kay", "80_Kay_10_M2_gecklickt"),
+            ("80_Kay", "80_Kay_15_M2_gecklickt")]
+    path_middle = "png/"
 
 
     framesOfClosedGlottis = [38, 3, 29, 27, 9, 13, 18,
@@ -630,9 +674,7 @@ if __name__ == "__main__":
 
         triangulatedPoints = np.load(mat_path)
         triangulatedPoints = triangulatedPoints.reshape(triangulatedPoints.shape[2], triangulatedPoints.shape[1], triangulatedPoints.shape[0]).T
-        triangulatedPoints = triangulatedPoints[30:60, :, :]
-        images = images[30:60]
-
+        
         triangulatedPoints = triangulatedPoints.tolist()
         newpoints = list()
         for points, image in zip(triangulatedPoints, images):
