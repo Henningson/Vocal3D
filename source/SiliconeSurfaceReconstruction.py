@@ -31,6 +31,16 @@ import visualization
 
 import ARAP
 
+
+
+
+from PyQt5.QtWidgets import QApplication
+import Viewer
+import igl
+import os
+import time
+import threading
+
 # Code from: https://stackoverflow.com/a/59204638
 def rotation_matrix_from_vectors(vec1, vec2):
     """ Find the rotation matrix that aligns vec1 to vec2
@@ -372,7 +382,6 @@ def controlPointBasedARAP(triangulatedPoints, images, glottalmidline, zSubdivisi
         left_points_list.append(leftPoints)
         right_points_list.append(rightPoints)
 
-    exit()
     copied_M5_left = np.expand_dims(np.array(M5_Left), 0).repeat(len(arap_c_left_list), axis=0)
     copied_M5_right = np.expand_dims(np.array(M5_Right), 0).repeat(len(arap_c_left_list), axis=0)
     copied_faces_left = np.expand_dims(np.array(faces_left), 0).repeat(len(arap_c_left_list), axis=0)
@@ -674,7 +683,9 @@ if __name__ == "__main__":
 
         triangulatedPoints = np.load(mat_path)
         triangulatedPoints = triangulatedPoints.reshape(triangulatedPoints.shape[2], triangulatedPoints.shape[1], triangulatedPoints.shape[0]).T
-        
+        triangulatedPoints = triangulatedPoints[30:60, :, :]
+        images = images[30:60]
+
         triangulatedPoints = triangulatedPoints.tolist()
         newpoints = list()
         for points, image in zip(triangulatedPoints, images):
@@ -706,4 +717,11 @@ if __name__ == "__main__":
         optimizedRight = np.array(optimizedRight)
         smoothedRight = scipy.ndimage.uniform_filter(optimizedRight, size=(5, 1, 1), mode='reflect', cval=0.0, origin=0)
 
-        visualization.MeshViewer(smoothedLeft, smoothedRight, zSubdivs)
+
+        viewer_app = QApplication(["Vocal3D - Vocal Fold 3D Reconstruction"])
+        viewer = Viewer.Viewer(smoothedLeft.shape[0], smoothedLeft.max(axis=1)[:, 1], smoothedRight.max(axis=1)[:, 1], smoothedLeft, smoothedRight, images, zSubdivs)
+        viewer.show()
+
+
+        # Launch the Qt application
+        viewer_app.exec()
