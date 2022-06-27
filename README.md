@@ -11,7 +11,7 @@
 This code accompanies the paper **Real-Time 3D Reconstruction of Human Vocal Folds via High-Speed Laser-Endoscopy**.
 
 ## Dataset
-The HLE Dataset described in the Paper is hosted ![here](https://github.com/Henningson/HLEDataset.git) on GitHub!  
+The HLE Dataset described in the Paper is hosted <a href="https://github.com/Henningson/HLEDataset.git">here on GitHub</a>!  
 We will add it to CERNs Zenodo Platform at a later stage.
 
 ## Prerequisites
@@ -21,7 +21,7 @@ You have been warned.
 
 ## Installation
 * Clone this repository
-* Download the ![HLE Dataset](https://github.com/Henningson/HLEDataset.git).
+* Download or clone the <a href="https://github.com/Henningson/HLEDataset.git">HLE Dataset</a>.
 * Install PyIGL and Nurbs-Diff as explained in their respective repositories
 * Compile the ARAP Code as explained in the PybindARAP submodule
 * If you didn't receive any errors run example.py in the source subdirectory.
