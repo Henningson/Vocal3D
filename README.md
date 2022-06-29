@@ -1,4 +1,4 @@
-<a href="https://www.lgdv.tf.fau.de/"><img align="right" src="images/lgdv_small.png"></a>
+![LGDV](images/lgdv_small.png) ![Phoniatric Division](images/Uniklinikum-Erlangen.svg)
 
 ![Python3](https://img.shields.io/badge/python-3.5%20%7C%203.6%20%7C%203.7-blue)
 [![Language](https://img.shields.io/badge/language-C++-blue.svg)](https://isocpp.org/)
@@ -7,14 +7,18 @@
 
 
 # Vocal3D
-**Vocal3D** is a library for the real-time reconstruction of human vocal folds using a single shot structured light system.  
+**Vocal3D** is a library for the real-time reconstruction of human vocal folds using a single shot structured light system.
+This is a joint work of the <a href="https://www.lgdv.tf.fau.de/">Chair of Visual Computing</a> of the Friedrich-Alexander University of Erlangen-Nuremberg and the <a href="https://www.hno-klinik.uk-erlangen.de/phoniatrie/">Phoniatric Division</a> of the University Hospital Erlangen. 
 This code accompanies the paper **Real-Time 3D Reconstruction of Human Vocal Folds via High-Speed Laser-Endoscopy**.
+
+![Example](images/reco_example.gif)
 
 ## Dataset
 The HLE Dataset described in the Paper is hosted <a href="https://github.com/Henningson/HLEDataset.git">here on GitHub</a>!  
 We will add it to CERNs Zenodo Platform at a later stage.
 
 ## Prerequisites
+Make sure that you have a Python version >=3.5 installed.
 A CUDA capable GPU is recommended, but not necessary.
 However, getting PyTorch3D to work inside the Nurbs-Diff Module without CUDA may require some tinkering.
 You have been warned.

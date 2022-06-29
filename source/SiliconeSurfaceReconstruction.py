@@ -683,11 +683,16 @@ if __name__ == "__main__":
 
         triangulatedPoints = np.load(mat_path)
         triangulatedPoints = triangulatedPoints.reshape(triangulatedPoints.shape[2], triangulatedPoints.shape[1], triangulatedPoints.shape[0]).T
-        triangulatedPoints = triangulatedPoints[30:60, :, :]
-        images = images[30:60]
+        triangulatedPoints = triangulatedPoints[30:, :, :]
+        images = images[30:]
 
         triangulatedPoints = triangulatedPoints.tolist()
         newpoints = list()
+
+        segmentations = list()
+
+        laserdots = list()
+
         for points, image in zip(triangulatedPoints, images):
             points = np.array(points)
             points2d = camera.project(points)
@@ -698,6 +703,17 @@ if __name__ == "__main__":
             points = points[~seghits]
             points2d = points2d[~seghits]
             newpoints.append(points)
+            segmentations.append(segmentation)
+
+            roi_image = np.zeros((256, 512), dtype=np.uint8)
+            x, w, y, h = roi
+            roi_image[y:y+h, x:x+w] = 255
+            laserpoints = image * roi_image
+            maxima = helper.findMaxima(image, roi_image)
+            maxima = cv2.dilate(maxima, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)))
+            maxima = np.where(maxima == 0, 0, 255).astype(np.uint8)
+            maxima = np.concatenate( [np.expand_dims(np.zeros(maxima.shape, dtype=np.uint8), -1), np.expand_dims(maxima, -1), np.expand_dims(np.zeros(maxima.shape, dtype=np.uint8), -1)], axis=-1, dtype=np.uint8)
+            laserdots.append(np.expand_dims(image, -1) | maxima)
 
 
         # If everything is working as intended
@@ -719,9 +735,8 @@ if __name__ == "__main__":
 
 
         viewer_app = QApplication(["Vocal3D - Vocal Fold 3D Reconstruction"])
-        viewer = Viewer.Viewer(smoothedLeft.shape[0], smoothedLeft.max(axis=1)[:, 1], smoothedRight.max(axis=1)[:, 1], smoothedLeft, smoothedRight, images, zSubdivs)
+        viewer = Viewer.Viewer(smoothedLeft.shape[0], smoothedLeft.max(axis=1)[:, 1], smoothedRight.max(axis=1)[:, 1], smoothedLeft, smoothedRight, images, segmentations, laserdots, zSubdivs)
         viewer.show()
-
 
         # Launch the Qt application
         viewer_app.exec()

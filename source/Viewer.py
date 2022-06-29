@@ -13,7 +13,8 @@ from random import randint
 
 import cv2
 
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QThread
+from PyQt5.QtGui import QImage, QPixmap
 from pyqtgraph import PlotWidget, plot
 import pyqtgraph as pg
 import numpy as np
@@ -40,7 +41,7 @@ class Viewer(QMainWindow):
     load_shader_signal = pyqtSignal()
     image_changed_signal = pyqtSignal(int)
 
-    def __init__(self, numFrames, heightLeft, heightRight, points_left, points_right, images, zSubdivs):
+    def __init__(self, numFrames, heightLeft, heightRight, points_left, points_right, images, segmentations, laserdots, zSubdivs):
         super().__init__()
         self.viewer_palette = {
             "viewer_background": "#252526",
@@ -53,9 +54,11 @@ class Viewer(QMainWindow):
 
         self.setAutoFillBackground(True)
         self.setStyleSheet(
-            f"background-color: {self.viewer_palette['viewer_background']}; color: {self.viewer_palette['font_color']};")
+            f"background-color: {self.viewer_palette['viewer_background']}; color: {self.viewer_palette['font_color']};" + "QSlider::handle:horizontal{background-color: white;}")
 
-        self.images = images
+        self.images = np.array(images)
+        self.segmentations = np.array(segmentations)
+        self.laserdots = laserdots
 
         self.main_layout = QGridLayout()
         self.central_widget = QWidget()
@@ -117,8 +120,7 @@ class Viewer(QMainWindow):
 
         self.screenshot_signal.connect(self.save_screenshot_)
         self.legend_signal.connect(self.add_ui_legend_)
-
-        self.add_ui_button("Start Animation", self.animate_func_async)
+        #self.add_ui_button("Do nothing button". self.save_screenshot_)
 
         # Add a mesh to our viewer widget
         # This requires three steps:
@@ -188,6 +190,32 @@ class Viewer(QMainWindow):
 
         self.set_column_stretch(1, 2)
 
+        self.timer_thread = QThread(self)
+        self.timer_thread.started.connect(self.gen_timer_thread)
+
+        self.image_timer_thread = QThread(self)
+        self.image_timer_thread.started.connect(self.gen_image_timer_thread)
+
+        self.playSet = False
+
+        for i in range(10):
+            self.add_ui_button("Button " + str(i), self.test)
+
+        #self.image_viewer.moveToThread(self.image_timer_thread)
+        #self.viewer_widget.moveToThread(self.timer_thread)
+
+    def gen_timer_thread(self):
+        timer = QTimer(self.timer_thread)
+        timer.timeout.connect(self.animate_func)
+        timer.setInterval(25)
+        timer.start()
+
+    def gen_image_timer_thread(self):
+        timer = QTimer(self.image_timer_thread)
+        timer.timeout.connect(self.update_images_func)
+        timer.setInterval(25)
+        timer.start()
+
     def generate_video_widget(self, frames):
         widget_video = QWidget(self)
         base_layout = QVBoxLayout()
@@ -231,40 +259,53 @@ class Viewer(QMainWindow):
         widget_video = QWidget(self)
         base_layout = QHBoxLayout()
         
-        self.graphicsview_main = pg.GraphicsView()
-        self.graphicsview_segmentation = pg.GraphicsView()
-        self.graphicsview_laserdots = pg.GraphicsView()
+        self.image_main = QLabel(self)
+        self.image_segmentation = QLabel(self)
+        self.image_laserdots = QLabel(self)
 
-        self.graphicsview_main.setAspectLocked(True)
-        self.graphicsview_segmentation.setAspectLocked(True)
-        self.graphicsview_laserdots.setAspectLocked(True)
+        self.image_main.setFixedSize(256, 512)
+        self.image_segmentation.setFixedSize(256, 512)
+        self.image_laserdots.setFixedSize(256, 512)
 
-        self.viewbox_main = pg.ViewBox()
-        self.viewbox_segmentation = pg.ViewBox()
-        self.viewbox_laserdots = pg.ViewBox()
+        #self.graphicsview_main.setAspectLocked(True)
+        #self.graphicsview_segmentation.setAspectLocked(True)
+        #self.graphicsview_laserdots.setAspectLocked(True)
 
-        self.graphicsview_main.setCentralItem(self.viewbox_main)
-        self.graphicsview_segmentation.setCentralItem(self.viewbox_segmentation)
-        self.graphicsview_laserdots.setCentralItem(self.viewbox_laserdots)
+        #self.graphicsview_main.useOpenGL()
+        #self.graphicsview_segmentation.useOpenGL()
+        #self.graphicsview_laserdots.useOpenGL()
 
-        self.image_main = pg.ImageItem()
-        self.image_segmentation = pg.ImageItem()
-        self.image_laserdots = pg.ImageItem()
+        #self.viewbox_main = pg.ViewBox()
+        #self.viewbox_segmentation = pg.ViewBox()
+        #self.viewbox_laserdots = pg.ViewBox()
+        
+        #self.viewbox_main.setAspectLocked(True)
+        #self.viewbox_segmentation.setAspectLocked(True)
+        #self.viewbox_laserdots.setAspectLocked(True)
 
-        self.viewbox_main.addItem(self.image_main)
-        self.viewbox_segmentation.addItem(self.image_segmentation)
-        self.viewbox_laserdots.addItem(self.image_laserdots)
+        #self.graphicsview_main.setCentralItem(self.viewbox_main)
+        #self.graphicsview_segmentation.setCentralItem(self.viewbox_segmentation)
+        #self.graphicsview_laserdots.setCentralItem(self.viewbox_laserdots)
 
-        base_layout.addWidget(self.graphicsview_main)
-        base_layout.addWidget(self.graphicsview_segmentation)
-        base_layout.addWidget(self.graphicsview_laserdots)
+        #self.image_main = pg.ImageItem()
+        #self.image_segmentation = pg.ImageItem()
+        #self.image_laserdots = pg.ImageItem()
+
+        #self.viewbox_main.addItem(self.image_main)
+        #self.viewbox_segmentation.addItem(self.image_segmentation)
+        #self.viewbox_laserdots.addItem(self.image_laserdots)
+
+        base_layout.addWidget(self.image_main)
+        base_layout.addWidget(self.image_segmentation)
+        base_layout.addWidget(self.image_laserdots)
         widget_video.setLayout(base_layout)
 
-        widget_video.setFixedSize(256*3, 512)
+        #widget_video.setFixedSize(256*3, 512)
 
         return widget_video
 
-
+    def test(self):
+        print("Yay")
 
     def add_viewer_widget(self, x, y, row_span=1, column_span=1):
         group_layout = QGridLayout()
@@ -407,9 +448,13 @@ class Viewer(QMainWindow):
         self.screenshot_signal.emit(path)
 
     def play_video_(self):
+        if not self.playSet:
+            self.playSet = True
+            self.timer_thread.start()
+            self.image_timer_thread.start()
+
         if self.pause:
             self.pause = False
-            self.animate_func_async()
 
     def pause_video_(self):
         self.pause = True
@@ -430,29 +475,26 @@ class Viewer(QMainWindow):
         if self.pause:
             self.updateSlider(self.slider_frame.value() - 1 if self.slider_frame.value() > self.slider_frame.minimum() else self.slider_frame.value())
             self.onSliderUpdate()
+            self.updateImages(self.slider_frame.value())
 
     def next_frame_(self):
         if self.pause:
             self.updateSlider(self.slider_frame.value() + 1 if self.slider_frame.value() < self.slider_frame.maximum() else self.slider_frame.maximum())
             self.onSliderUpdate()
+            self.updateImages(self.slider_frame.value())
 
     def animate_func(self):
         #global pts_, vertices_right, faces
-        while not self.pause:
+        if not self.pause:
                 new_value = self.slider_frame.value() + 1 if self.slider_frame.value() < self.slider_frame.maximum() - 1 else 0
-
                 self.updateMesh(new_value)
                 self.updatePlots(new_value)
                 self.updateSlider(new_value)
-                #self.updateImagesAsync(new_value)
-                time.sleep(0.04)
 
-
-    # This animation needs to run in its own thread to not block the rendering on the main thread.
-    def animate_func_async(self):
-        animating_thread = threading.Thread(target=self.animate_func, args=())
-        animating_thread.start()
-
+    def update_images_func(self):
+        #global pts_, vertices_right, faces
+        if not self.pause:
+                self.updateImages(self.slider_frame.value())
 
     def updateImagesAsync(self, val):
         animating_thread = threading.Thread(target=self.updateImages, args=[val])
@@ -475,6 +517,24 @@ class Viewer(QMainWindow):
         self.updatePlots(self.slider_frame.value())
 
     def updateImages(self, frameNum):
-        self.image_main.setImage(cv2.rotate(self.images[frameNum], cv2.ROTATE_90_CLOCKWISE))
-        self.image_segmentation.setImage(cv2.rotate(self.images[frameNum], cv2.ROTATE_90_CLOCKWISE))
-        self.image_laserdots.setImage(cv2.rotate(self.images[frameNum], cv2.ROTATE_90_CLOCKWISE))
+        image = cv2.cvtColor(cv2.rotate(self.images[frameNum], cv2.ROTATE_90_CLOCKWISE), cv2.COLOR_GRAY2BGR)
+        h, w, ch = image.shape
+        bytesPerLine = ch * w
+        qimage = QImage(image.data, w, h, bytesPerLine, QImage.Format_BGR888)
+        #p = image.scaled(256, 512, Qt.KeepAspectRatio)
+        
+        segmentation = cv2.cvtColor(cv2.rotate(self.segmentations[frameNum], cv2.ROTATE_90_CLOCKWISE), cv2.COLOR_GRAY2BGR)
+        segmentation = segmentation | image
+        h, w, ch = segmentation.shape
+        bytesPerLine = ch * w
+        qsegmentation = QImage(segmentation.data, w, h, bytesPerLine, QImage.Format_BGR888)
+        #p = image.scaled(256, 512, Qt.KeepAspectRatio)
+        
+        laserdotim = cv2.rotate(self.laserdots[frameNum], cv2.ROTATE_90_CLOCKWISE)
+        h, w, ch = laserdotim.shape
+        bytesPerLine = ch * w
+        qlaserdotim = QImage(laserdotim.data, w, h, bytesPerLine, QImage.Format_BGR888)
+
+        self.image_main.setPixmap(QPixmap.fromImage(qimage))
+        self.image_segmentation.setPixmap(QPixmap.fromImage(qsegmentation))
+        self.image_laserdots.setPixmap(QPixmap.fromImage(qlaserdotim))
