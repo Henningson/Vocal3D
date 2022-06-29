@@ -683,8 +683,8 @@ if __name__ == "__main__":
 
         triangulatedPoints = np.load(mat_path)
         triangulatedPoints = triangulatedPoints.reshape(triangulatedPoints.shape[2], triangulatedPoints.shape[1], triangulatedPoints.shape[0]).T
-        triangulatedPoints = triangulatedPoints[30:, :, :]
-        images = images[30:]
+        triangulatedPoints = triangulatedPoints[30:60, :, :]
+        images = images[30:60]
 
         triangulatedPoints = triangulatedPoints.tolist()
         newpoints = list()

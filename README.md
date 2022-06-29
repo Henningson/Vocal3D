@@ -30,19 +30,20 @@ cd Vocal3D
 git submodules init --update
 ```
 
-Generate a new environment with
+Generate a new conda environment and activate it:
 ```
 conda create --name Vocal3D python=3.8
+conda activate Vocal3D
 ```
 
-Then, install the necessary libraries with
+Then, install the necessary packages with
 ```
-pip install opencv-python-headless matplotlib scikit-learn tqdm geomdl PyQt5 pyqtgrap ninja
+pip install opencv-python-headless matplotlib scikit-learn tqdm geomdl PyQt5 pyqtgraph ninja
 pip install -U fvcore
 conda install -c bottler nvidiacub
 ```
 
-Finally, install pytorch and pytorch3D
+Install pytorch and pytorch3D
 ```
 conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
 pip install "git+https://github.com/facebookresearch/pytorch3d.git@stable"
