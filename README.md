@@ -21,20 +21,56 @@ We will add it to CERNs Zenodo Platform at a later stage.
 Make sure that you have a Python version >=3.5 installed.
 A CUDA capable GPU is recommended, but not necessary.
 However, getting PyTorch3D to work inside the Nurbs-Diff Module without CUDA may require some tinkering.
-You have been warned.
 
 ## Installation
-* Clone this repository
-* Download or clone the <a href="https://github.com/Henningson/HLEDataset.git">HLE Dataset</a>.
-* Install PyIGL and Nurbs-Diff as explained in their respective repositories
-* Compile the ARAP Code as explained in the PybindARAP submodule
-* If you didn't receive any errors run example.py in the source subdirectory.
+First, make sure that conda is installed and clone this repository, including its submodules:
+```
+git clone https://github.com/Henningson/Vocal3D.git
+cd Vocal3D
+git submodules init --update
+```
 
-## Usage
-*TODO*
+Generate a new environment with
+```
+conda create --name Vocal3D python=3.8
+```
 
-## Examples
+Then, install the necessary libraries with
+```
+pip install opencv-python-headless matplotlib scikit-learn tqdm geomdl PyQt5 pyqtgrap ninja
+pip install -U fvcore
+conda install -c bottler nvidiacub
+```
 
+Finally, install pytorch and pytorch3D
+```
+conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
+pip install "git+https://github.com/facebookresearch/pytorch3d.git@stable"
+```
+
+Download and install <a href="https://github.com/anjanadev96/NURBS_Diff.git">NURBS_Diff</a>
+```
+git clone https://github.com/anjanadev96/NURBS_Diff.git
+cd NURBS_Diff
+python setup.py install
+```
+
+Download and install the <a href="https://github.com/sunreef/PyIGL_viewer">PyIGL Viewer</a>
+```
+pip install git+git://github.com/sunreef/PyIGL_viewer.git
+```
+And finally install our lightweight <a href="https://github.com/Henningson/PybindARAP">C++ ARAP implementation</a>.
+```
+cd PybindARAP
+python setup.py install
+```
 
 ## Citation
-If you find this work useful please use the following citation:
+If you use this work in your research, please cite the following paper:
+
+    @article{TBD,
+      author = {TBD},
+      journal = {TBD},
+      title = {TBD},
+      year = {TBD}
+    }
