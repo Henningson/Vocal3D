@@ -27,7 +27,7 @@ First, make sure that conda is installed and clone this repository, including it
 ```
 git clone https://github.com/Henningson/Vocal3D.git
 cd Vocal3D
-git submodules init --update
+git submodule update --init --recursive
 ```
 
 Generate a new conda environment and activate it:
