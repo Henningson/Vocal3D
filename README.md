@@ -41,6 +41,7 @@ Then, install the necessary packages with
 pip install opencv-python-headless matplotlib scikit-learn tqdm geomdl PyQt5 pyqtgraph ninja
 pip install -U fvcore
 conda install -c bottler nvidiacub
+conda install -c conda-forge igl
 ```
 
 Install pytorch and pytorch3D
