@@ -56,9 +56,10 @@ cd NURBS_Diff
 python setup.py install
 ```
 
-Download and install the <a href="https://github.com/sunreef/PyIGL_viewer">PyIGL Viewer</a>
+Download and install our fork of Victor Cornillères <a href="https://github.com/sunreef/PyIGL_viewer">PyIGL Viewer</a>.
+It adds some shadercode that we use for a more domain specific visualization.
 ```
-pip install git+git://github.com/sunreef/PyIGL_viewer.git
+pip install git+git://github.com/Henningson/PyIGL_viewer.git
 ```
 And finally install our lightweight <a href="https://github.com/Henningson/PybindARAP">C++ ARAP implementation</a>.
 ```
