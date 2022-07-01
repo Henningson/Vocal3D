@@ -27,7 +27,7 @@ First, make sure that conda is installed and clone this repository, including it
 ```
 git clone https://github.com/Henningson/Vocal3D.git
 cd Vocal3D
-git submodules init --update
+git submodule update --init --recursive
 ```
 
 Generate a new conda environment and activate it:
@@ -41,6 +41,7 @@ Then, install the necessary packages with
 pip install opencv-python-headless matplotlib scikit-learn tqdm geomdl PyQt5 pyqtgraph ninja
 pip install -U fvcore
 conda install -c bottler nvidiacub
+conda install -c conda-forge igl
 ```
 
 Install pytorch and pytorch3D
@@ -56,9 +57,10 @@ cd NURBS_Diff
 python setup.py install
 ```
 
-Download and install the <a href="https://github.com/sunreef/PyIGL_viewer">PyIGL Viewer</a>
+Download and install our fork of Victor Cornillères <a href="https://github.com/sunreef/PyIGL_viewer">PyIGL Viewer</a>.  
+It adds some shadercode that we use for a more domain specific visualization.
 ```
-pip install git+git://github.com/sunreef/PyIGL_viewer.git
+pip install git+git://github.com/Henningson/PyIGL_viewer.git
 ```
 And finally install our lightweight <a href="https://github.com/Henningson/PybindARAP">C++ ARAP implementation</a>.
 ```
