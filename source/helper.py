@@ -149,6 +149,27 @@ def generateMask(image, cameraMatrix, laserOrigin, laserBeam, minDistance, maxDi
     return image
 
 
+def loadVideo(path, camera_matrix, distortion_coefficients):
+    images = list()
+
+    cap = cv2.VideoCapture(path)
+
+    if not cap.isOpened():
+        print("Error opening video file")
+        return None
+
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if ret:
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            frame = cv2.undistort(frame, camera_matrix, distortion_coefficients)
+            images.append(frame)
+        else:
+            break
+    
+    return images
+
+
 def loadImages(path, camera_matrix, distortion_coefficients):
     images = list()
     number_files = len(os.listdir(path))

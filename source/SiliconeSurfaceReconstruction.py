@@ -185,7 +185,7 @@ def getNeighbours(faces, numPoints):
 # Given
 # 3D Points of type NumFrames X NumPoints x 3
 # Calibrated laser object
-def controlPointBasedARAP(triangulatedPoints, images, glottalmidline, zSubdivisions=5):
+def controlPointBasedARAP(triangulatedPoints, images, camera, segmentator, glottalmidline, zSubdivisions=5):
     left_M5_list = []
     right_M5_list = []
     left_points_list = []
@@ -219,7 +219,7 @@ def controlPointBasedARAP(triangulatedPoints, images, glottalmidline, zSubdivisi
     for i in tqdm(range(len(triangulatedPoints))):
         points = triangulatedPoints[i]
         points = points[~np.isnan(points).any(axis=1)]
-        if points.shape[0] <= 50:
+        if points.shape[0] <= 25:
             continue
 
         centroid = np.expand_dims(np.sum(points, axis=0) / points.shape[0], 0)
@@ -247,7 +247,7 @@ def controlPointBasedARAP(triangulatedPoints, images, glottalmidline, zSubdivisi
         z = (-rotatedPlaneNormal[0] * xx - rotatedPlaneNormal[1] * yy - (-np.array([0.0, 0.0, 0.0]).dot(rotatedPlaneNormal))) * 1. / rotatedPlaneNormal[2]
         
         upperMidLine, lowerMidLine = glottalmidline
-        glottalOutline = getGlottalOutline(images[i])
+        glottalOutline = segmentator.getGlottalOutline(images[i])
         glottalCameraRays = camera.getRayMat(glottalOutline)
         t = helper.rayPlaneIntersectionMat(centroid, np.expand_dims(planeNormal, 0), np.zeros(glottalCameraRays.shape), glottalCameraRays)
         glottalOutlinePoints = t * glottalCameraRays - centroid
@@ -417,7 +417,7 @@ def reduceArrays(arrayList, minimum):
 
     return new
 
-def surfaceOptimization(control_points, points, zSubdivisions=10, iterations=100, lr=1.0):
+def surfaceOptimization(control_points, points, zSubdivisions=10, iterations=10, lr=0.1):
     numFrames = len(control_points)
     optimizedControlPoints = []
     avg_loss = 0.0
@@ -428,6 +428,9 @@ def surfaceOptimization(control_points, points, zSubdivisions=10, iterations=100
     points = np.array(points)
     minimum = 1000000000000000
     for i in range(points.shape[0]):
+        if points[i].shape[0] == 0:
+            points[i] = points[i-1]
+
         if minimum > points[i].shape[0]:
             minimum = points[i].shape[0]
 
@@ -462,7 +465,7 @@ def surfaceOptimization(control_points, points, zSubdivisions=10, iterations=100
 
     # Getting everything on the GPU and setting up the Layer for the Surface Evaluation
     target = torch.from_numpy(targets)
-    layer = SurfEval(num_ctrl_pts1, num_ctrl_pts2, dimension=3, p=3, q=3, u=torch.FloatTensor(np.array(surface.knotvector_u)), v=torch.FloatTensor(np.array(surface.knotvector_v)), out_dim_u=num_eval_pts_u, out_dim_v=num_eval_pts_v)
+    layer = SurfEval(num_ctrl_pts1, num_ctrl_pts2, dimension=3, p=3, q=3, out_dim_u=num_eval_pts_u, out_dim_v=num_eval_pts_v)
 
     inp_ctrl_pts = torch.FloatTensor(frame_ctrl_pnts.astype(np.float32))
     inp_ctrl_pts = torch.nn.Parameter(inp_ctrl_pts)
@@ -510,22 +513,7 @@ def getPrincipalComponentAxes(points, normalized=True):
 
     return pc[0], pc[1]
 
-def getGlottalOutline(image):
-    segmentation = np.where(image == 0, 255, 0).astype(np.uint8)
-    contours, hierarchy = cv2.findContours(segmentation, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
-    i = 0
-    contour_points = list()
-    while (i != -1):
-        contour_points.append(contours[hierarchy[0][i][0]][:, 0, :])
-        i = hierarchy[0][i][0]
-
-    contourArray = None
-    if len(contour_points) > 1:
-        contourArray = np.concatenate(contour_points, axis=0)
-    else:
-        contourArray = contour_points[0]
-    return contourArray - np.ones(contourArray.shape)
 
 
 

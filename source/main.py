@@ -2,7 +2,7 @@ from matplotlib.pyplot import grid
 import numpy as np
 
 import sys
-sys.path.append("..")
+sys.path.append(".")
 
 from VocalfoldHSVSegmentation import vocalfold_segmentation
 
@@ -13,8 +13,9 @@ import argparse
 import helper
 import chamfer
 
-
+import BSplineVisualization
 import SurfaceReconstruction
+import SiliconeSurfaceReconstruction
 import scipy
 
 import RHC
@@ -152,37 +153,28 @@ def generateMisalignings(grid2DPixLocations, camera, laser, height, width):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Automatic triangulation of High Speed Video of Vocal Folds")
-    parser.add_argument('--calibration_file', '-c', type=str, required=True, help="Path to a calibration .MAT or .JSON File")
-    parser.add_argument('--image_path', '-i', type=str, required=True, help="Path to a folder containing the Vocal Fold images.")
+    parser.add_argument('--camera_calibration', '-c', type=str, required=True, help="Path to a calibration .MAT or .JSON File")
+    parser.add_argument('--laser_calibration', '-l', type=str, required=True, help="Path to a calibration .MAT or .JSON File")
+    parser.add_argument('--video_file', '-v', type=str, required=True, help="Path to a folder containing the high speed video.")
 
     args = parser.parse_args()
 
-    image_path = args.image_path
-    calib_path = args.calibration_file
+    video_path = args.video_file
+    cam_calib_path = args.camera_calibration
+    laser_calib_path = args.laser_calibration
 
-    print("Image Path: {0}".format(image_path))
-    print("Calibration File {0}".format(calib_path))
-
-    camera = Camera(calib_path, "MAT")
-    laser = Laser(calib_path, "MAT")
-    images = helper.loadImages(image_path, camera.intrinsic(), camera.distortionCoefficients())
+    camera = Camera(cam_calib_path, "JSON")
+    laser = Laser(laser_calib_path, "JSON")
+    images = helper.loadVideo(video_path, camera.intrinsic(), camera.distortionCoefficients())
 
     width = images[0].shape[1]
     height = images[0].shape[0]
-    
-    
-    #epc_image = visualization.generateEPCLineImage(camera, laser, 40.0, 100.0, height, width)
-    #cv2.imshow("EPC", epc_image)
-
-    subject = image_path.split("/")[-3]
 
     segmentator = vocalfold_segmentation.HSVGlottisSegmentator(images[:150])
-    segmentator.generate(isSilicone=False, plot=False)
+    segmentator.generate(plot=False)
     x, w, y, h = segmentator.getROI()
     x = x+w//2 - w*2
     w = 4*w
-
-    frameOfClosedGlottis = segmentator.estimateClosedGlottis()
 
     # Use ROI to generate mask image
     segmentation = np.zeros((height, width), dtype=np.uint8)
@@ -200,28 +192,31 @@ if __name__ == "__main__":
     pixelLocations, laserGridIDs = Correspondences.initialize(laser, camera, maxima, vocalfold_image, 40.0, 80.0)
     grid2DPixLocations = RHC.RHC(laserGridIDs, pixelLocations, maxima, camera, laser)
 
-    generateMisalignings(grid2DPixLocations, camera, laser, height, width)
+    #generateMisalignings(grid2DPixLocations, camera, laser, height, width)
 
-    cf = VoronoiRHC.CorrespondenceFinder(camera, laser, minWorkingDistance=40.0, maxWorkingDistance=100.0, threshold=5.0, debug=maxima)
-    correspondences = []
-    while len(correspondences) == 0:
-        correspondences = cf.establishCorrespondences(vectorized_maxima)
+    #cf = VoronoiRHC.CorrespondenceFinder(camera, laser, minWorkingDistance=40.0, maxWorkingDistance=100.0, threshold=5.0, debug=maxima)
+    #correspondences = []
+    #while len(correspondences) == 0:
+    #    correspondences = cf.establishCorrespondences(vectorized_maxima)
 
-    grid2DPixLocations = [[laser.getXYfromN(id), np.flip(pix)] for id, pix in correspondences]
+    #grid2DPixLocations = [[laser.getXYfromN(id), np.flip(pix)] for id, pix in correspondences]
 
     temporalCorrespondence = Correspondences.generateFramewise(images, frameOfClosedGlottis, grid2DPixLocations, segmentation)
     triangulatedPoints = np.array(Triangulation.triangulationMat(camera, laser, temporalCorrespondence, 40.0, 80.0, 40.0, 90.0))
-    triangulatedPoints = triangulatedPoints[:50]
 
     zSubdivisions = 8
-    leftDeformed, rightDeformed, leftPoints, rightPoints = SurfaceReconstruction.controlPointBasedARAP(triangulatedPoints, laser, images, camera, segmentator, frameOfClosedGlottis, zSubdivisions=zSubdivisions)
+    glottalmidline = segmentator.getGlottalMidline(images[frameOfClosedGlottis])
+    leftDeformed, rightDeformed, leftPoints, rightPoints = SiliconeSurfaceReconstruction.controlPointBasedARAP(triangulatedPoints, images, camera, segmentator, glottalmidline, zSubdivisions=zSubdivisions)
 
-    optimizedLeft = SurfaceReconstruction.surfaceOptimization(leftDeformed, leftPoints, zSubdivisions=zSubdivisions, iterations=20, lr=1.0)
+    optimizedLeft = SiliconeSurfaceReconstruction.surfaceOptimization(leftDeformed, leftPoints, zSubdivisions=zSubdivisions, iterations=1, lr=0.0)
     optimizedLeft = np.array(optimizedLeft)
     smoothedLeft = scipy.ndimage.uniform_filter(optimizedLeft, size=(7, 1, 1), mode='reflect', cval=0.0, origin=0)
 
-    optimizedRight = SurfaceReconstruction.surfaceOptimization(rightDeformed, rightPoints, zSubdivisions=zSubdivisions, iterations=20, lr=1.0)
+    optimizedRight = SiliconeSurfaceReconstruction.surfaceOptimization(rightDeformed, rightPoints, zSubdivisions=zSubdivisions, iterations=20, lr=1.0)
     optimizedRight = np.array(optimizedRight)
     smoothedRight = scipy.ndimage.uniform_filter(optimizedRight, size=(7, 1, 1), mode='reflect', cval=0.0, origin=0)
-#
-    visualization.Mesh(smoothedLeft, smoothedRight, zSubdivisions, leftPoints, rightPoints)
+
+    #for i in range(triangulatedPoints.shape[0]):
+    #    visualization.plotPoints3D(triangulatedPoints[i])
+
+    #BSplineVisualization.visualizeSingleBM5(smoothedLeft, leftPoints, zSubdivisions)

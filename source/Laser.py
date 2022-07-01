@@ -1,6 +1,7 @@
 import numpy as np
 import scipy.io
 import math
+import json
 
 class Laser:
     def __init__(self, path="", filetype=None):
@@ -29,7 +30,16 @@ class Laser:
 
     #TODO: Implement
     def readFromJSON(self, path):
-        pass
+        with open(path) as file:
+            # Load JSON File
+            DICT = json.load(file)
+            self.setLaserDimensions(DICT['Dimensions'][0], DICT['Dimensions'][1])
+            self.setRotationMatrix(np.array(DICT['Rotation']))
+            self.setTranslation(np.array(DICT['Translation']))
+            self.setAlpha(np.array(DICT['Alpha']))
+        
+        self._direction = np.matmul(-self._rotation_matrix, np.array([[0.0, 0.0, -1.0]]).T).T
+        self.generateLaserRays()
 
     def generateLaserRays(self):
         laserField = list()

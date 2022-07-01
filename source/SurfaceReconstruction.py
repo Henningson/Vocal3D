@@ -13,6 +13,7 @@ from mpl_toolkits.mplot3d import Axes3D
 from pytorch3d.loss import chamfer_distance
 from scipy.spatial import Delaunay, KDTree
 from torch_nurbs_eval.surf_eval import SurfEval
+
 from tqdm import tqdm
 
 import helper
