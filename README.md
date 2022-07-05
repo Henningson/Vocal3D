@@ -68,6 +68,13 @@ cd PybindARAP
 python setup.py install
 ```
 
+## Usage
+An example video and calibration files are given in the assets folder.
+Unzip the example folder with `unzip assets/sample_data.zip -d assets/` and run the example using
+```
+python source/main.py -v assets/example_vid.avi -l assets/laser_calibration.json -c assets/camera_calibration --silicone
+```
+
 ## Citation
 If you use this work in your research, please cite the following paper:
 
