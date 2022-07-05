@@ -5,6 +5,7 @@ import sys
 sys.path.append(".")
 
 from VocalfoldHSVSegmentation import vocalfold_segmentation
+import SiliconeSegmentator
 
 from Laser import Laser
 from Camera import Camera
@@ -30,6 +31,9 @@ import cv2
 
 from sklearn.decomposition import PCA
 import visualization
+
+from PyQt5.QtWidgets import QApplication
+import Viewer
 
 
 def testGeneratingLaserBeams(camera, laser, local_maximum, minDistance, maxDistance, imageHeight, imageWidth):
@@ -156,25 +160,30 @@ if __name__ == "__main__":
     parser.add_argument('--camera_calibration', '-c', type=str, required=True, help="Path to a calibration .MAT or .JSON File")
     parser.add_argument('--laser_calibration', '-l', type=str, required=True, help="Path to a calibration .MAT or .JSON File")
     parser.add_argument('--video_file', '-v', type=str, required=True, help="Path to a folder containing the high speed video.")
+    parser.add_argument('--silicone', '-s', action="store_true", help="Specifies, if a silicone processing is to be used.")
 
     args = parser.parse_args()
 
     video_path = args.video_file
     cam_calib_path = args.camera_calibration
     laser_calib_path = args.laser_calibration
+    is_silicone = args.silicone
 
     camera = Camera(cam_calib_path, "JSON")
     laser = Laser(laser_calib_path, "JSON")
-    images = helper.loadVideo(video_path, camera.intrinsic(), camera.distortionCoefficients())
+    images = helper.loadVideo(video_path, camera.intrinsic(), camera.distortionCoefficients())[30:]
 
     width = images[0].shape[1]
     height = images[0].shape[0]
 
-    segmentator = vocalfold_segmentation.HSVGlottisSegmentator(images[:150])
-    segmentator.generate(plot=False)
+    segmentator = SiliconeSegmentator.SiliconeVocalfoldSegmentator(images[:50]) if is_silicone else vocalfold_segmentation.HSVGlottisSegmentator(images[:50])
+    segmentator.generate()
+
     x, w, y, h = segmentator.getROI()
-    x = x+w//2 - w*2
-    w = 4*w
+    x = x+w//2 - h
+    w = 2*h
+    y = int(y - (h*0.2))
+    h = int(h + (h * 0.4))
 
     # Use ROI to generate mask image
     segmentation = np.zeros((height, width), dtype=np.uint8)
@@ -185,7 +194,6 @@ if __name__ == "__main__":
     vocalfold_image = images[frameOfClosedGlottis]
 
     maxima = helper.findMaxima(vocalfold_image, segmentation)
-
     # Changing from N x (Y,X) to N x (X,Y)
     vectorized_maxima = np.flip(np.stack(maxima.nonzero(), axis=1), axis=1)
 
@@ -208,15 +216,22 @@ if __name__ == "__main__":
     glottalmidline = segmentator.getGlottalMidline(images[frameOfClosedGlottis])
     leftDeformed, rightDeformed, leftPoints, rightPoints = SiliconeSurfaceReconstruction.controlPointBasedARAP(triangulatedPoints, images, camera, segmentator, glottalmidline, zSubdivisions=zSubdivisions)
 
-    optimizedLeft = SiliconeSurfaceReconstruction.surfaceOptimization(leftDeformed, leftPoints, zSubdivisions=zSubdivisions, iterations=1, lr=0.0)
+    optimizedLeft = SiliconeSurfaceReconstruction.surfaceOptimization(leftDeformed, leftPoints, zSubdivisions=zSubdivisions, iterations=10, lr=0.1)
     optimizedLeft = np.array(optimizedLeft)
     smoothedLeft = scipy.ndimage.uniform_filter(optimizedLeft, size=(7, 1, 1), mode='reflect', cval=0.0, origin=0)
 
-    optimizedRight = SiliconeSurfaceReconstruction.surfaceOptimization(rightDeformed, rightPoints, zSubdivisions=zSubdivisions, iterations=20, lr=1.0)
+    optimizedRight = SiliconeSurfaceReconstruction.surfaceOptimization(rightDeformed, rightPoints, zSubdivisions=zSubdivisions, iterations=10, lr=0.1)
     optimizedRight = np.array(optimizedRight)
     smoothedRight = scipy.ndimage.uniform_filter(optimizedRight, size=(7, 1, 1), mode='reflect', cval=0.0, origin=0)
 
-    #for i in range(triangulatedPoints.shape[0]):
-    #    visualization.plotPoints3D(triangulatedPoints[i])
 
-    #BSplineVisualization.visualizeSingleBM5(smoothedLeft, leftPoints, zSubdivisions)
+
+    segmentations = [segmentator.segment_image(image) for image in images]
+    laserdots = helper.generate_laserdot_images(triangulatedPoints, images, camera, segmentation)
+
+    viewer_app = QApplication(["Vocal3D - Vocal Fold 3D Reconstruction"])
+    viewer = Viewer.Viewer(smoothedLeft.shape[0], smoothedLeft.max(axis=1)[:, 1], smoothedRight.max(axis=1)[:, 1], smoothedLeft, smoothedRight, images, segmentations, laserdots, zSubdivisions)
+    viewer.show()
+
+    # Launch the Qt application
+    viewer_app.exec()

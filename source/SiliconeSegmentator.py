@@ -7,7 +7,7 @@ class SiliconeVocalfoldSegmentator:
         self.images = images
 
     def segment_image(self, frame):
-        return np.where(image == 0, 255, 0).astype(np.uint8)
+        return np.where(frame == 0, 255, 0).astype(np.uint8)
 
     def getGlottalOutline(self, frame):
         segmentation = self.segment_image(frame)
@@ -70,15 +70,30 @@ class SiliconeVocalfoldSegmentator:
         return self.roiX, self.roiWidth, self.roiY, self.roiHeight
 
     def estimateClosedGlottis(self):
-        num_pixels = 50000
+        num_pixels = 100000000
         glottis_closed_at_frame = 0
         for count, image in enumerate(self.images[1:-1]):
             segmentation = self.segment_image(image)
 
-            num_glottis_pixels = len(np.where(segmentation == 0, 255, 0).nonzero()[0])
+            num_glottis_pixels = len(segmentation.nonzero()[0])
 
             if num_pixels > num_glottis_pixels:
                 num_pixels = num_glottis_pixels
                 glottis_closed_at_frame = count
         
         return glottis_closed_at_frame
+
+    def estimateMaximallyOpenGlottis(self):
+        num_pixels = 0
+        
+        for count, image in enumerate(self.images[1:-1]):
+            segmentation = self.segment_image(image)
+
+            num_glottis_pixels = len(segmentation.nonzero()[0])
+
+            if num_pixels > num_glottis_pixels:
+                num_pixels = num_glottis_pixels
+                glottis_closed_at_frame = count
+
+    def generate(self):
+        self.generateROI(self.segment_image(self.images[self.estimateClosedGlottis()]))

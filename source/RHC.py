@@ -46,7 +46,7 @@ def RHC(laserGridStuff, pixelLocations, maxima, camera, laser):
     points2D = [x for _, x in grid2DPixLocations]
 
     DGD = DiscreteGradientDescent.DiscreteGradientDescent(camera, laser, points2D, gridIDs)
-    indexUpdateVector = DGD.RANSAC(30, 100)
+    indexUpdateVector = DGD.RANSAC(8, 30)
 
     grid2DPixLocations = list()
     for i in range(len(gridIDs)):

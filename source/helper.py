@@ -358,3 +358,32 @@ def reorder_faces(vertices, faces):
             new_faces.append([face[2], face[1], face[0]])
     
     return new_faces
+
+
+def generate_laserdot_images(triangulatedPoints, images, camera, segmentation):
+    laserdots = list()
+    for points, image in zip(triangulatedPoints, images):
+        points = np.array(points)
+        points2d = camera.project(points)
+        #points2d = points2d[points2d > 0]
+        projection = np.zeros(image.shape, dtype=np.uint8)
+        points2d = points2d.astype(np.int32)[..., ::-1]
+        in_bounds = np.bitwise_and(np.bitwise_and(points2d[:, 0] > 0, points2d[:, 1] > 0), np.bitwise_and(points2d[:, 0] < image.shape[0], points2d[:, 1] < image.shape[1]))
+        points2d = points2d[in_bounds, :]
+        #print(points2d.shape)
+        projection[points2d[:, 0], points2d[:, 1]] = 255
+        projection = cv2.dilate(projection, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)))
+
+        maxima = findMaxima(image, segmentation)
+        maxima = cv2.dilate(maxima, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)))
+        maxima = np.where(maxima == 0, 0, 255).astype(np.uint8)
+        #maxima = np.concatenate( [np.expand_dims(np.zeros(image.shape, dtype=np.uint8), -1), maxima, np.expand_dims(np.zeros(image.shape, dtype=np.uint8), -1)], axis=-1, dtype=np.uint8)
+
+        expanded_image = np.repeat(np.expand_dims(image, -1), 3, -1)
+
+        expanded_image[maxima > 0, :] = [255, 0, 0]
+        expanded_image[projection > 0, :] = [0, 255, 0]
+
+        laserdots.append(expanded_image)
+
+    return laserdots

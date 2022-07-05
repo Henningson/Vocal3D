@@ -59,9 +59,7 @@ def generateFramewise(images, closedGlottisFrame, correspondenceEstimate, segmen
         batched_weights = np.expand_dims(batched_weights, -1)
 
         weightbased_pixel_offsets = (batched_coords * batched_weights).sum(axis=(1,2)) / batched_weights.sum(axis=(1,2))
-
         maxima_vec = maxima_vec + (np.array([[0.5, 0.5]]) + weightbased_pixel_offsets)
-
 
         distances, indices = neighbours.kneighbors(maxima_vec)
 
