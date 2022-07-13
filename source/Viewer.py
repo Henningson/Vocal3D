@@ -59,6 +59,14 @@ class QHLine(QFrame):
         super(QHLine, self).__init__()
         self.setFrameShape(QFrame.HLine)
         self.setFrameShadow(QFrame.Sunken)
+        self.setStyleSheet("background-color: #999999;")
+
+class QVLine(QFrame):
+    def __init__(self):
+        super(QVLine, self).__init__()
+        self.setFrameShape(QFrame.VLine)
+        self.setFrameShadow(QFrame.Sunken)
+        self.setStyleSheet("background-color: #999999;")
 
 
 class VideoPlayerWidget(QWidget):
@@ -117,8 +125,12 @@ class VideoPlayerWidget(QWidget):
         self.slider.setValue(0)
         self.play_video_()
 
+    def update_frame_when_playing(self):
+        if self.isPlaying():
+            self.next_frame_()
+
     def next_frame_(self):
-        self.slider.setValue(self.slider.value() + 1 % self.slider.maximum())
+        self.slider.setValue(self.slider.value() + 1 % (self.slider.maximum() - 1))
 
     def prev_frame_(self):
         self.slider.setValue(self.slider.value() - 1 if self.slider.minimum() < self.slider.value() - 1 else self.slider.value())
@@ -173,13 +185,6 @@ class OpenCloseSaveWidget(QWidget):
 
 
 class MainMenuWidget(QWidget):
-    sig_segmentation = pyqtSignal()
-    sig_correspondences = pyqtSignal()
-    sig_triangulation = pyqtSignal()
-    sig_arap = pyqtSignal()
-    sig_optimization = pyqtSignal()
-    sig_reconstruct = pyqtSignal()
-
     def __init__(self, viewer_palette, parent=None):
         super(MainMenuWidget, self).__init__()
         #self.setStyle(QFrame.Panel | QFrame.Raised)
@@ -203,36 +208,21 @@ class MainMenuWidget(QWidget):
         self.addSubMenu("Temporal Smoothing", [("Window Size", "field", 7)])
 
         self.base_layout.addWidget(QHLine())
-        self.addButton("Segment Images", self.startSegmentation)
-        self.addButton("Build Correspondences", self.startCorrespondenceEstimation)
-        self.addButton("Triangulate", self.startTriangulation)
-        self.addButton("Dense Shape Estimation", self.startARAP)
-        self.addButton("Least Squares Optimization", self.startOptimization)
+        self.addButton("Segment Images")
+        self.addButton("Build Correspondences")
+        self.addButton("Triangulate")
+        self.addButton("Dense Shape Estimation")
+        self.addButton("Least Squares Optimization")
         self.base_layout.addWidget(QHLine())
-        self.addButton("Automatic Reconstruction", self.automaticReconstruction)
-
-    def startSegmentation(self):
-        self.sig_segmentation.emit()
-        
-    def startCorrespondenceEstimation(self):
-        print("LOL")
-    def startTriangulation(self):
-        print("LOL")
-    def startARAP(self):
-        print("LOL")
-    def startOptimization(self):
-        print("LOL")
-    def automaticReconstruction(self):
-        print("LOL")
+        self.addButton("Automatic Reconstruction")
 
     def addSubMenu(self, title, listOfTriplets):
         submenu_widget = SubMenuWidget(title, listOfTriplets, self)
         self.base_layout.addWidget(submenu_widget)
         self.submenu_dict[title] = submenu_widget.get_dict()
 
-    def addButton(self, label, function):
+    def addButton(self, label):
         button = QPushButton(label)
-        #button.clicked.connect(function)
         self.base_layout.addWidget(button)
         self.button_dict[label] = button
 
@@ -323,17 +313,25 @@ class ImageViewerWidget(QWidget):
         self.imageDICT = {}
 
         self.addImageWidget("Main", (256, 512))
+        self.base_layout.addWidget(QVLine())
         self.addImageWidget("Segmentation", (256, 512))
+        self.base_layout.addWidget(QVLine())
         self.addImageWidget("Laserdots", (256, 512))
 
     def addImageWidget(self, title, size):
         widg = QWidget(self)
         lay = QVBoxLayout(widg)
 
+        title_widget = QLabel(title)
+        title_font = title_widget.font()
+        title_font.setBold(True)
+        title_widget.setFont(title_font)
+
         image_widg = QLabel(title)
         image_widg.setFixedSize(size[0], size[1])
         self.imageDICT[title] = image_widg
-        lay.addWidget(QLabel(title))
+
+        lay.addWidget(title_widget, alignment=Qt.AlignmentFlag.AlignCenter)
         lay.addWidget(image_widg)
         self.base_layout.addWidget(widg)
 
@@ -414,15 +412,19 @@ class Viewer(QWidget):
         widg_right = QWidget(self)
         vertical_layout = QVBoxLayout(widg_right)
         vertical_layout.addWidget(self.image_widget)
+        vertical_layout.addWidget(QHLine())
         vertical_layout.addWidget(self.graph_widget)
 
         widg_middle = QWidget(self)
         vertical_layout = QVBoxLayout(widg_middle)
         vertical_layout.addWidget(self.viewer_widget, 90)
+        vertical_layout.addWidget(QHLine())
         vertical_layout.addWidget(self.player_widget, 10)
 
         self.main_layout.addWidget(self.menu_widget, 10)
+        self.main_layout.addWidget(QVLine())
         self.main_layout.addWidget(widg_middle, 60)
+        self.main_layout.addWidget(QVLine())
         self.main_layout.addWidget(widg_right, 30)
 
 
@@ -451,6 +453,7 @@ class Viewer(QWidget):
 
     def gen_timer_thread(self):
         timer = QTimer(self.timer_thread)
+        timer.timeout.connect(self.player_widget.update_frame_when_playing)
         timer.timeout.connect(self.animate_func)
         timer.setInterval(25)
         timer.start()
