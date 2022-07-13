@@ -4,6 +4,7 @@ import time
 import threading
 import Mesh
 import igl
+import scipy
 
 from PyIGL_viewer.viewer.viewer_widget import ViewerWidget
 from PyIGL_viewer.viewer.ui_widgets import PropertyWidget, LegendWidget
@@ -14,7 +15,7 @@ from random import randint
 import cv2
 
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QThread
-from PyQt5.QtGui import QImage, QPixmap
+from PyQt5.QtGui import QImage, QPixmap, QFont
 from pyqtgraph import PlotWidget, plot
 import pyqtgraph as pg
 import numpy as np
@@ -28,20 +29,344 @@ from PyQt5.QtWidgets import (
     QSlider,
     QGridLayout,
     QPushButton,
-    QLabel
+    QLabel,
+    QMenuBar,
+    QMenu,
+    QFormLayout,
+    QLineEdit,
+    QCheckBox,
+    QFileDialog
 )
+
+import sys
+sys.path.append(".")
+import Camera
+import Laser
+import helper
+import SiliconeSegmentator
+import RHC
+import VoronoiRHC
+import Correspondences
+import Triangulation
+import SiliconeSurfaceReconstruction
+from VocalfoldHSVSegmentation import vocalfold_segmentation
 
 pg.setConfigOption('imageAxisOrder', 'row-major')
 
 
-class Viewer(QMainWindow):
+class QHLine(QFrame):
+    def __init__(self):
+        super(QHLine, self).__init__()
+        self.setFrameShape(QFrame.HLine)
+        self.setFrameShadow(QFrame.Sunken)
+
+
+class VideoPlayerWidget(QWidget):
+    def __init__(self, parent=None):
+        super(VideoPlayerWidget, self).__init__()
+        layout = QVBoxLayout(self)
+
+        self.slider = QSlider(Qt.Horizontal, self)
+        self.slider.setMinimum(0)
+        self.slider.setRange(0, 100)
+        self.slider.setValue(0)
+        self.slider.setGeometry(0, 0, 1000, 1000)
+        layout.addWidget(self.slider)
+        self.setLayout(layout)
+
+        widget_button = QWidget(self)
+        layout_button = QHBoxLayout()
+        
+        self.bPlay = QPushButton("Play")
+        self.bPause = QPushButton("Pause")
+        self.bStop = QPushButton("Stop")
+        self.bReplay = QPushButton("Replay")
+        self.bPrevious = QPushButton("Previous Frame")
+        self.bNext = QPushButton("Next Frame")
+
+        self.play = True
+        
+        self.bPlay.clicked.connect(self.play_video_)
+        self.bPause.clicked.connect(self.pause_video_)
+        self.bStop.clicked.connect(self.stop_video_)
+        self.bReplay.clicked.connect(self.replay_video_)
+        self.bPrevious.clicked.connect(self.prev_frame_)
+        self.bNext.clicked.connect(self.next_frame_)
+        
+        layout_button.addWidget(self.bPlay)
+        layout_button.addWidget(self.bPause)
+        layout_button.addWidget(self.bStop)
+        layout_button.addWidget(self.bReplay)
+        layout_button.addWidget(self.bPrevious)
+        layout_button.addWidget(self.bNext)
+
+        widget_button.setLayout(layout_button)
+        layout.addWidget(widget_button)
+
+    def play_video_(self):
+        self.play = True
+
+    def pause_video_(self):
+        self.play = False
+
+    def stop_video_(self):
+        self.slider.setValue(0)
+        self.pause_video_()
+
+    def replay_video_(self):
+        self.slider.setValue(0)
+        self.play_video_()
+
+    def next_frame_(self):
+        self.slider.setValue(self.slider.value() + 1 % self.slider.maximum())
+
+    def prev_frame_(self):
+        self.slider.setValue(self.slider.value() - 1 if self.slider.minimum() < self.slider.value() - 1 else self.slider.value())
+
+    def setSliderPosition(self, pos):
+        self.slider.setValue(pos)
+
+    def setSliderRange(self, min, max):
+        self.slider.setRange(min, max)
+
+    def isPlaying(self):
+        return self.play
+
+    def isPaused(self):
+        return not self.play
+
+    def getCurrentFrame(self):
+        return self.slider.value()
+
+class OpenCloseSaveWidget(QWidget):
+    fileOpenedSignal = pyqtSignal(str, str, str)
+
+    def __init__(self, parent=None):
+        super(OpenCloseSaveWidget, self).__init__()
+        self.setLayout(QHBoxLayout())
+
+        self.addButton("Open", self.open)
+        self.addButton("Load", self.open)
+        self.addButton("Save", self.open)
+
+    def addButton(self, title, function):
+        button = QPushButton(title)
+        button.clicked.connect(function)
+        self.layout().addWidget(button)
+
+    def open(self):
+        self.camera_calib_path, _ = QFileDialog.getOpenFileName(self, 'Open Camera Calibration file', '', "Camera Calibration Files (*.json *.mat)")
+        self.laser_calib_path, _ = QFileDialog.getOpenFileName(self, 'Open Laser Calibration file', '', "Laser Calibration Files (*.json *.mat)")
+        self.video_path, _ = QFileDialog.getOpenFileName(self, 'Open Video', '', "Video Files (*.avi *.mp4 *.mkv *.AVI *.MP4)")
+        self.fileOpenedSignal.emit(self.camera_calib_path, self.laser_calib_path, self.video_path)
+
+    def loadProject(self):
+        project_path = QFileDialog.getOpenFileName(self, 'Open Camera Calibration file', '', "Project Folders (*.json *.mat)")
+
+        # TODO: implement
+        # Load Stuff
+
+    def saveProject(self):
+        # Save a project
+        print("Save a project! And implement me!")
+        pass
+
+
+class MainMenuWidget(QWidget):
+    sig_segmentation = pyqtSignal()
+    sig_correspondences = pyqtSignal()
+    sig_triangulation = pyqtSignal()
+    sig_arap = pyqtSignal()
+    sig_optimization = pyqtSignal()
+    sig_reconstruct = pyqtSignal()
+
+    def __init__(self, viewer_palette, parent=None):
+        super(MainMenuWidget, self).__init__()
+        #self.setStyle(QFrame.Panel | QFrame.Raised)
+        self.setStyleSheet(f"background-color: {viewer_palette['menu_background']}")
+        self.base_layout = QVBoxLayout()
+        self.base_layout.setAlignment(Qt.AlignTop)
+        self.setLayout(self.base_layout)
+
+        self.ocs_widget = OpenCloseSaveWidget(self)
+        self.base_layout.addWidget(self.ocs_widget)
+
+        self.submenu_dict = {}
+        self.button_dict = {}
+
+        self.addSubMenu("Tensor Product M5", [("Z Subdivisions", "field", 8), ("X Subdivisions", "field", 3)])
+        self.addSubMenu("Segmentation", [("Koc et al", "checkbox", True), ("Neural Segmentation", "checkbox", False), ("Silicone Segmentation", "checkbox", False)])
+        self.addSubMenu("RHC", [("Activated", "checkbox", True), ("Iterations", "field", 30), ("Consensus Size", "field", 8), ("GA Thresh", "field", 5.0), ("Minimum Distance", "field", 40.0), ("Maximum Distance", "field", 80.0)])
+        self.addSubMenu("Voronoi RHC", [("Activated", "checkbox", False), ("Threshold", "field", 5)])
+        self.addSubMenu("As-Rigid-As-Possible", [("Iterations", "field", 2), ("Weight", "field", 10000)])
+        self.addSubMenu("Least Squares Optimization", [("Iterations", "field", 10), ("Learning Rate", "field", 0.1)])
+        self.addSubMenu("Temporal Smoothing", [("Window Size", "field", 7)])
+
+        self.base_layout.addWidget(QHLine())
+        self.addButton("Segment Images", self.startSegmentation)
+        self.addButton("Build Correspondences", self.startCorrespondenceEstimation)
+        self.addButton("Triangulate", self.startTriangulation)
+        self.addButton("Dense Shape Estimation", self.startARAP)
+        self.addButton("Least Squares Optimization", self.startOptimization)
+        self.base_layout.addWidget(QHLine())
+        self.addButton("Automatic Reconstruction", self.automaticReconstruction)
+
+    def startSegmentation(self):
+        self.sig_segmentation.emit()
+        
+    def startCorrespondenceEstimation(self):
+        print("LOL")
+    def startTriangulation(self):
+        print("LOL")
+    def startARAP(self):
+        print("LOL")
+    def startOptimization(self):
+        print("LOL")
+    def automaticReconstruction(self):
+        print("LOL")
+
+    def addSubMenu(self, title, listOfTriplets):
+        submenu_widget = SubMenuWidget(title, listOfTriplets, self)
+        self.base_layout.addWidget(submenu_widget)
+        self.submenu_dict[title] = submenu_widget.get_dict()
+
+    def addButton(self, label, function):
+        button = QPushButton(label)
+        #button.clicked.connect(function)
+        self.base_layout.addWidget(button)
+        self.button_dict[label] = button
+
+    def getSubmenuValue(self, submenu, key):
+        field = self.submenu_dict[submenu][key]
+        return field.text() if type(field) is QLineEdit else field.isChecked()
+
+
+class SubMenuWidget(QWidget):
+    def __init__(self, title, listOfTriplets, parent=None):
+        super(SubMenuWidget, self).__init__()
+        base_layout = QVBoxLayout(self)
+
+        title = QLabel(title)
+        title_font = title.font()
+        title_font.setBold(True)
+        title.setFont(title_font)
+
+        base_layout.addWidget(title)
+        
+        base_layout.addWidget(QHLine())
+        
+        self.DICT = {}
+
+        self.subform = QWidget(self)
+        self.subform_layout = QFormLayout()
+        self.subform.setLayout(self.subform_layout)
+
+        for key, button_type, default_value in listOfTriplets:
+            if button_type == "checkbox":
+                check = QCheckBox(self.subform)
+                check.setChecked(default_value)
+                self.subform_layout.addRow(QLabel(key, self.subform), check)
+                self.DICT[key] = check
+            elif button_type == "field":
+                lineedit = QLineEdit(str(default_value), self.subform)
+                self.subform_layout.addRow(QLabel(key, self.subform), lineedit)
+                self.DICT[key] = lineedit
+
+        base_layout.addWidget(self.subform)
+
+    def get_dict(self):
+        return self.DICT
+
+
+class GraphWidget(QWidget):
+    def __init__(self, parent=None):
+        super(GraphWidget, self).__init__()
+        layout = QVBoxLayout(self)
+
+        self.height_graph_left = pg.PlotWidget()
+        self.current_frame_line_height_left = pg.InfiniteLine(pos=0)
+        self.height_graph_left.addItem(self.current_frame_line_height_left)
+
+        self.height_graph_right = pg.PlotWidget()
+        self.current_frame_line_height_right = pg.InfiniteLine(pos=0)
+        self.height_graph_right.addItem(self.current_frame_line_height_right)
+        
+        self.glottal_seg_graph = pg.PlotWidget()
+        self.current_frame_line_glottal_seg = pg.InfiniteLine(pos=0)
+        self.glottal_seg_graph.addItem(self.current_frame_line_glottal_seg)
+        
+        layout.addWidget(self.height_graph_left)
+        layout.addWidget(self.height_graph_right)
+        layout.addWidget(self.glottal_seg_graph)
+
+    def updateLines(self, val):
+        self.current_frame_line_glottal_seg.setPos(val)
+        self.current_frame_line_height_right.setPos(val)
+        self.current_frame_line_height_left.setPos(val)
+
+    def updateGraph(self, vals, graph):
+        x = np.arange(0, len(vals))
+        pen = pg.mkPen(color=(255, 125, 15))
+        graph.plot(x, vals, pen=pen)
+
+    def updateGraphs(self, a, b, c):
+        self.updateGraph(a, self.height_graph_right)
+        self.updateGraph(b, self.height_graph_left)
+        self.updateGraph(c, self.glottal_seg_graph)
+
+
+class ImageViewerWidget(QWidget):
+    def __init__(self, parent=None):
+        super(ImageViewerWidget, self).__init__()
+        self.base_layout = QHBoxLayout(self)
+        
+        self.imageDICT = {}
+
+        self.addImageWidget("Main", (256, 512))
+        self.addImageWidget("Segmentation", (256, 512))
+        self.addImageWidget("Laserdots", (256, 512))
+
+    def addImageWidget(self, title, size):
+        widg = QWidget(self)
+        lay = QVBoxLayout(widg)
+
+        image_widg = QLabel(title)
+        image_widg.setFixedSize(size[0], size[1])
+        self.imageDICT[title] = image_widg
+        lay.addWidget(QLabel(title))
+        lay.addWidget(image_widg)
+        self.base_layout.addWidget(widg)
+
+    def updateImages(self, a, b, c):
+        # We assume images to be in RGB Format
+        self.updateImage(a, self.imageDICT["Main"])
+        self.updateImage(b, self.imageDICT["Segmentation"])
+        self.updateImage(c, self.imageDICT["Laserdots"])
+
+    def convertImage(self, image):
+        # Check if Mono
+        if len(image.shape) == 2:
+            image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+
+        if image.shape[0] < image.shape[1]:
+            image = cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
+
+        h, w, ch = image.shape
+        bytesPerLine = ch * w
+        return QImage(image.data, w, h, bytesPerLine, QImage.Format_BGR888)
+        
+    def updateImage(self, image, widget):
+        widget.setPixmap(QPixmap.fromImage(self.convertImage(image)))
+
+
+class Viewer(QWidget):
     close_signal = pyqtSignal()
     screenshot_signal = pyqtSignal(str)
     legend_signal = pyqtSignal(list, list)
     load_shader_signal = pyqtSignal()
     image_changed_signal = pyqtSignal(int)
 
-    def __init__(self, numFrames, heightLeft, heightRight, points_left, points_right, images, segmentations, laserdots, zSubdivs):
+    def __init__(self):
         super().__init__()
         self.viewer_palette = {
             "viewer_background": "#252526",
@@ -54,89 +379,155 @@ class Viewer(QMainWindow):
 
         self.setAutoFillBackground(True)
         self.setStyleSheet(
-            f"background-color: {self.viewer_palette['viewer_background']}; color: {self.viewer_palette['font_color']};" + "QSlider::handle:horizontal{background-color: white;}")
+            f"background-color: {self.viewer_palette['viewer_background']}; color: {self.viewer_palette['font_color']};" + "QSlider::handle:horizontal{background-color: white;};" + "QLineEdit { background-color: yellow }")
 
-        self.images = np.array(images)
-        self.segmentations = np.array(segmentations)
-        self.laserdots = laserdots
+        # SET UP FOR LATER
 
-        self.main_layout = QGridLayout()
-        self.central_widget = QWidget()
-        self.central_widget.setLayout(self.main_layout)
+        self.camera = None
+        self.laser = None
 
-        menu_widget = QFrame(self)
-        menu_widget.setFrameStyle(QFrame.Panel | QFrame.Raised)
-        menu_widget.setStyleSheet(
-            f"background-color: {self.viewer_palette['menu_background']}"
-        )
-        self.menu_layout = QVBoxLayout()
-        self.menu_layout.setAlignment(Qt.AlignTop)
-        menu_widget.setLayout(self.menu_layout)
+        self.images = None
+        self.segmentations = None
+        self.laserdots = None
 
-        self.line_current_playtime_left = pg.InfiniteLine(pos=0)
-        self.line_current_playtime_right = pg.InfiniteLine(pos=0)
+        self.left_vf_triangulated = None
+        self.right_vf_triangulated = None
 
-        self.image_viewer = self.generate_video_frame_widget()
-        self.updateImages(0)
+        self.left_vf_mesh = None
+        self.right_vf_mesh = None
 
-        self.graph_height_left = pg.PlotWidget()
-        x = np.arange(0, numFrames)
-        pen = pg.mkPen(color=(255, 125, 15))
-        self.graph_height_left.plot(x, heightLeft, pen=pen)
-        self.graph_height_left.addItem(self.line_current_playtime_left)
+        self.plots_set = False
+        self.meshes_set = False
+        self.images_set = False
 
+        self.main_layout = QHBoxLayout(self)
 
-        self.graph_height_right = pg.PlotWidget()
-        x = np.arange(0, numFrames)
-        pen = pg.mkPen(color=(255, 125, 15))
-        self.graph_height_right.plot(x, heightRight, pen=pen)
-        self.graph_height_right.addItem(self.line_current_playtime_right)
+        self.image_widget = ImageViewerWidget(self)
+        self.player_widget = VideoPlayerWidget(self)
+        self.graph_widget = GraphWidget(self)
+        self.menu_widget = MainMenuWidget(self.viewer_palette, self)
+        self.viewer_widget = self.add_viewer_widget(0, 0, 1, 1)
 
-        #self.graph_GAW.removeItem(self.line_current_playtime)
+        # Compatibility with PyIGL viewer widget
+        self.linked_cameras = False 
+        
+        widg_right = QWidget(self)
+        vertical_layout = QVBoxLayout(widg_right)
+        vertical_layout.addWidget(self.image_widget)
+        vertical_layout.addWidget(self.graph_widget)
 
-        self.main_layout.addWidget(menu_widget, 0, 0, -1, 1)
-        self.main_layout.addWidget(self.image_viewer, 0, 4, 2, 1)
-        self.main_layout.addWidget(self.graph_height_left, 2, 4, 1, 1)
-        self.main_layout.addWidget(self.graph_height_right, 3, 4, 1, 1)
-        #self.main_layout.addWidget(self.graph_height_left, 0, 4, 4, 1)
-        #self.main_layout.addWidget(GAW_graph, 3, 3)
+        widg_middle = QWidget(self)
+        vertical_layout = QVBoxLayout(widg_middle)
+        vertical_layout.addWidget(self.viewer_widget, 90)
+        vertical_layout.addWidget(self.player_widget, 10)
 
-        self.pause = False
-
-        self.viewer_widgets = []
-        self.linked_cameras = False
-        self.menu_properties = {}
-        self.current_menu_layout = self.menu_layout
-
-        self.setCentralWidget(self.central_widget)
+        self.main_layout.addWidget(self.menu_widget, 10)
+        self.main_layout.addWidget(widg_middle, 60)
+        self.main_layout.addWidget(widg_right, 30)
 
 
-        # Add a viewer widget to visualize 3D meshes to our viewer window
-        self.viewer_widget, _ = self.add_viewer_widget(0, 1, 5, 2)
         self.viewer_widget.link_light_to_camera()
 
-        self.player_widget = self.generate_video_widget(numFrames)
-        self.main_layout.addWidget(self.player_widget, 5, 1, 4, 2)
 
-        self.screenshot_signal.connect(self.save_screenshot_)
-        self.legend_signal.connect(self.add_ui_legend_)
-        #self.add_ui_button("Do nothing button". self.save_screenshot_)
-
-        # Add a mesh to our viewer widget
-        # This requires three steps:
-        # - Adding the mesh vertices and faces
-        # - Adding a mesh prefab that contains shader attributes and uniform values
-        # - Adding an instance of our prefab whose position is defined by a model matrix
+        self.menu_widget.ocs_widget.fileOpenedSignal.connect(self.loadData)
+        self.menu_widget.button_dict["Segment Images"].clicked.connect(self.segmentImages)
+        self.menu_widget.button_dict["Build Correspondences"].clicked.connect(self.buildCorrespondences)
+        self.menu_widget.button_dict["Triangulate"].clicked.connect(self.triangulate)
+        self.menu_widget.button_dict["Dense Shape Estimation"].clicked.connect(self.denseShapeEstimation)
+        self.menu_widget.button_dict["Least Squares Optimization"].clicked.connect(self.lsqOptimization)
+        self.menu_widget.button_dict["Automatic Reconstruction"].clicked.connect(self.automaticReconstruction)
 
 
-        self.pts_left, self.pts_right, self.faces = Mesh.generate_BM5_mesh(points_left, points_right, zSubdivs)
+        self.timer_thread = QThread(self)
+        self.timer_thread.started.connect(self.gen_timer_thread)
+
+        self.image_timer_thread = QThread(self)
+        self.image_timer_thread.started.connect(self.gen_image_timer_thread)
+
+        self.timer_thread.start()
+        self.image_timer_thread.start()
+
+        self.loadData("assets/camera_calibration.json", "assets/laser_calibration.json", "assets/example_vid.avi")
+
+    def gen_timer_thread(self):
+        timer = QTimer(self.timer_thread)
+        timer.timeout.connect(self.animate_func)
+        timer.setInterval(25)
+        timer.start()
+
+    def gen_image_timer_thread(self):
+        timer = QTimer(self.image_timer_thread)
+        timer.timeout.connect(self.update_images_func)
+        timer.setInterval(25)
+        timer.start()
+
+    def add_viewer_widget(self, x, y, row_span=1, column_span=1):
+        group_layout = QGridLayout()
+        group_layout.setSpacing(0)
+        group_layout.setContentsMargins(0, 0, 0, 0)
+        widget = QFrame(self)
+        widget.setLineWidth(2)
+        widget.setLayout(group_layout)
+        widget.setObjectName("groupFrame")
+        widget.setStyleSheet(
+            "#groupFrame { border: 1px solid "
+            + self.viewer_palette["viewer_widget_border_color"]
+            + "; }"
+        )
+
+        viewer_widget = ViewerWidget(self)
+        viewer_widget.setFocusPolicy(Qt.ClickFocus)
+        group_layout.addWidget(viewer_widget)
+        #self.main_layout.addWidget(widget, x, y, row_span, column_span)
+        viewer_widget.show()
+        return viewer_widget
+    
+    def update_all_viewers(self):
+        self.viewer_widget.update()
+
+    def set_background_color(self, color):
+        self.viewer_palette["viewer_background"] = color
+        self.setStyleSheet(
+            f"background-color: {self.viewer_palette['viewer_background']}"
+        )
+
+    def keyPressEvent(self, e):
+        if e.key() == Qt.Key_Escape:
+            sys.stdout.close()
+            sys.stderr.close()
+            self.close_signal.emit()
+            exit()
+
+    def closeEvent(self, event):
+        self.close_signal.emit()
+
+    def animate_func(self):
+        self.updateMesh(self.player_widget.getCurrentFrame())
+        self.updatePlots(self.player_widget.getCurrentFrame())
+
+    def update_images_func(self):
+        if self.images_set:
+            curr_frame = self.player_widget.getCurrentFrame()
+            self.image_widget.updateImages(self.images[curr_frame], self.segmentations[curr_frame], self.laserdots[curr_frame])
+
+    def updateMesh(self, frameNum):
+        if self.meshes_set:
+            self.viewer_widget.update_mesh_vertices(self.mesh_index_left, self.pts_left[frameNum].reshape((-1, 3)).astype(np.float32))
+            self.viewer_widget.update_mesh_vertices(self.mesh_index_right, self.pts_right[frameNum].reshape((-1, 3)).astype(np.float32))
+            self.viewer_widget.update()
+
+    def updatePlots(self, frameNum):
+        if self.plots_set:
+            self.graph_widget.updateLines(frameNum)
+
+    def addVocalfoldMeshes(self, points_left, points_right, zSubdivisions):
+        self.pts_left, self.pts_right, self.faces = Mesh.generate_BM5_mesh(points_left, points_right, zSubdivisions)
         vertices_left = self.pts_left[0].reshape((-1, 3))
         vertices_right = self.pts_right[0].reshape((-1, 3))
 
-        # Here, we use the lambert shader.
-        # This shader requires two things:
-        # - A uniform value called 'albedo' for the color of the mesh.
-        # - An attribute called 'normal' for the mesh normals.
+        self.graph_widget.updateGraphs(np.array(points_right)[:, :, 1].max(axis=1), np.array(points_left)[:, :, 1].max(axis=1), np.array(points_left)[:, :, 1].max(axis=1))
+        self.setPlots()
+
         self.uniforms = {}
         self.vertex_attributes_left = {}
         self.face_attributes_left = {}
@@ -188,353 +579,153 @@ class Viewer(QMainWindow):
         )
         self.viewer_widget.add_wireframe(self.instance_index_right, line_color=np.array([0.1, 0.1, 0.1]))
 
-        self.set_column_stretch(1, 2)
+    def setImages(self):
+        self.images_set = True
 
-        self.timer_thread = QThread(self)
-        self.timer_thread.started.connect(self.gen_timer_thread)
+    def unsetImages(self):
+        self.images_set = False
 
-        self.image_timer_thread = QThread(self)
-        self.image_timer_thread.started.connect(self.gen_image_timer_thread)
+    def setMeshes(self):
+        self.meshes_set = True
 
-        self.playSet = False
+    def unsetMeshes(self):
+        self.meshes_set = False
 
-        for i in range(10):
-            self.add_ui_button("Button " + str(i), self.test)
+    def setPlots(self):
+        self.plots_set = True
 
-        #self.image_viewer.moveToThread(self.image_timer_thread)
-        #self.viewer_widget.moveToThread(self.timer_thread)
+    def unsetPlots(self):
+        self.plots_set = False
 
-    def gen_timer_thread(self):
-        timer = QTimer(self.timer_thread)
-        timer.timeout.connect(self.animate_func)
-        timer.setInterval(25)
-        timer.start()
+    def loadData(self, camera_path, laser_path, video_path):
+        self.camera = Camera.Camera(camera_path, "JSON")
+        self.laser = Laser.Laser(laser_path, "JSON")
+        self.images = helper.loadVideo(video_path, self.camera.intrinsic(), self.camera.distortionCoefficients())
+        self.segmentations = self.images
+        self.laserdots = self.images
 
-    def gen_image_timer_thread(self):
-        timer = QTimer(self.image_timer_thread)
-        timer.timeout.connect(self.update_images_func)
-        timer.setInterval(25)
-        timer.start()
+        self.player_widget.setSliderRange(0, len(self.images))
 
-    def generate_video_widget(self, frames):
-        widget_video = QWidget(self)
-        base_layout = QVBoxLayout()
+        self.images_set = True
 
-        self.slider_frame = QSlider(Qt.Horizontal, widget_video)
-        self.slider_frame.setMinimum(0)
-        self.slider_frame.setRange(0, frames - 1)
-        self.slider_frame.setValue(0)
-        self.slider_frame.setGeometry(0, 0, 1000, 1000)
-        #self.slider_frame.
-        #self.slider_frame.set
-        base_layout.addWidget(self.slider_frame)
-        widget_video.setLayout(base_layout)
-
-        widget_button = QWidget(widget_video)
-        layout_button = QHBoxLayout()
-        self.button_play = QPushButton("Play")
-        self.button_play.clicked.connect(self.play_video_)
-        self.button_pause = QPushButton("Pause")
-        self.button_pause.clicked.connect(self.pause_video_)
-        self.button_stop = QPushButton("Stop")
-        self.button_stop.clicked.connect(self.stop_video_)
-        self.button_replay = QPushButton("Replay")
-        self.button_replay.clicked.connect(self.replay_video_)
-        self.button_previous = QPushButton("Previous Frame")
-        self.button_previous.clicked.connect(self.previous_frame_)
-        self.button_next = QPushButton("Next Frame")
-        self.button_next.clicked.connect(self.next_frame_)
-        layout_button.addWidget(self.button_play)
-        layout_button.addWidget(self.button_pause)
-        layout_button.addWidget(self.button_stop)
-        layout_button.addWidget(self.button_replay)
-        layout_button.addWidget(self.button_previous)
-        layout_button.addWidget(self.button_next)
-        widget_button.setLayout(layout_button)
-        base_layout.addWidget(widget_button)
-
-        return widget_video
-
-    def generate_video_frame_widget(self):
-        widget_video = QWidget(self)
-        base_layout = QHBoxLayout()
-        
-        self.image_main = QLabel(self)
-        self.image_segmentation = QLabel(self)
-        self.image_laserdots = QLabel(self)
-
-        self.image_main.setFixedSize(256, 512)
-        self.image_segmentation.setFixedSize(256, 512)
-        self.image_laserdots.setFixedSize(256, 512)
-
-        #self.graphicsview_main.setAspectLocked(True)
-        #self.graphicsview_segmentation.setAspectLocked(True)
-        #self.graphicsview_laserdots.setAspectLocked(True)
-
-        #self.graphicsview_main.useOpenGL()
-        #self.graphicsview_segmentation.useOpenGL()
-        #self.graphicsview_laserdots.useOpenGL()
-
-        #self.viewbox_main = pg.ViewBox()
-        #self.viewbox_segmentation = pg.ViewBox()
-        #self.viewbox_laserdots = pg.ViewBox()
-        
-        #self.viewbox_main.setAspectLocked(True)
-        #self.viewbox_segmentation.setAspectLocked(True)
-        #self.viewbox_laserdots.setAspectLocked(True)
-
-        #self.graphicsview_main.setCentralItem(self.viewbox_main)
-        #self.graphicsview_segmentation.setCentralItem(self.viewbox_segmentation)
-        #self.graphicsview_laserdots.setCentralItem(self.viewbox_laserdots)
-
-        #self.image_main = pg.ImageItem()
-        #self.image_segmentation = pg.ImageItem()
-        #self.image_laserdots = pg.ImageItem()
-
-        #self.viewbox_main.addItem(self.image_main)
-        #self.viewbox_segmentation.addItem(self.image_segmentation)
-        #self.viewbox_laserdots.addItem(self.image_laserdots)
-
-        base_layout.addWidget(self.image_main)
-        base_layout.addWidget(self.image_segmentation)
-        base_layout.addWidget(self.image_laserdots)
-        widget_video.setLayout(base_layout)
-
-        #widget_video.setFixedSize(256*3, 512)
-
-        return widget_video
-
-    def test(self):
-        print("Yay")
-
-    def add_viewer_widget(self, x, y, row_span=1, column_span=1):
-        group_layout = QGridLayout()
-        group_layout.setSpacing(0)
-        group_layout.setContentsMargins(0, 0, 0, 0)
-        widget = QFrame(self)
-        widget.setLineWidth(2)
-        widget.setLayout(group_layout)
-        widget.setObjectName("groupFrame")
-        widget.setStyleSheet(
-            "#groupFrame { border: 1px solid "
-            + self.viewer_palette["viewer_widget_border_color"]
-            + "; }"
-        )
-
-        viewer_widget = ViewerWidget(self)
-        viewer_widget.setFocusPolicy(Qt.ClickFocus)
-        group_layout.addWidget(viewer_widget)
-        self.main_layout.addWidget(widget, x, y, row_span, column_span)
-        viewer_widget.show()
-        self.viewer_widgets.append(viewer_widget)
-        return viewer_widget, len(self.viewer_widgets) - 1
-
-    def get_viewer_widget(self, index):
-        if len(self.viewer_widgets) > index:
-            return self.viewer_widgets[index]
+    def segmentImages(self):
+        if self.menu_widget.getSubmenuValue("Segmentation", "Koc et al"):
+            self.segmentator = vocalfold_segmentation.HSVGlottisSegmentator(self.images[:50])
+        elif self.menu_widget.getSubmenuValue("Segmentation", "Neural Segmentation"):
+            self.segmentator = None
+            # TODO: Implement
+        elif self.menu_widget.getSubmenuValue("Segmentation", "Silicone Segmentation"):
+                self.segmentator = SiliconeSegmentator.SiliconeVocalfoldSegmentator(self.images[:50])
         else:
-            return None
-
-    def link_all_cameras(self):
-        if len(self.viewer_widgets) > 0:
-            self.camera = self.viewer_widgets[0].camera
-            self.linked_cameras = True
-            for widget in self.viewer_widgets:
-                widget.camera = self.camera
-            self.update_all_viewers()
-
-    def unlink_all_cameras(self):
-        if len(self.viewer_widgets) > 0:
-            self.linked_cameras = False
-            for widget in self.viewer_widgets:
-                widget.camera = copy.deepcopy(widget.camera)
-            self.update_all_viewers()
-
-    def update_all_viewers(self):
-        for widget in self.viewer_widgets:
-            widget.update()
-
-    def start_ui_group(self, name):
-        group_layout = QVBoxLayout()
-        widget = QFrame(self)
-        widget.setLineWidth(2)
-        widget.setLayout(group_layout)
-        widget.setObjectName("groupFrame")
-        widget.setStyleSheet(
-            "#groupFrame { border: 1px solid "
-            + self.viewer_palette["ui_group_border_color"]
-            + "; }"
-        )
-        group_label = QLabel(name, widget)
-        group_layout.addWidget(group_label)
-        group_layout.setAlignment(group_label, Qt.AlignHCenter)
-        group_layout.setContentsMargins(2, 2, 2, 2)
-        self.menu_layout.addWidget(widget)
-        self.current_menu_layout = group_layout
-
-    def finish_ui_group(self):
-        self.current_menu_layout = self.menu_layout
-
-    def add_ui_button(self, text, function, color=None):
-        if color == None:
-            color = self.viewer_palette["ui_element_background"]
-        button = QPushButton(text, self)
-        button.clicked.connect(function)
-        button.setAutoFillBackground(True)
-        button.setStyleSheet(f"background-color: {color}")
-        self.current_menu_layout.addWidget(button)
-        return button
-
-    def add_ui_property(self, property_name, text, initial_value, read_only=False):
-        widget = PropertyWidget(text, initial_value, read_only)
-        self.menu_properties[property_name] = widget
-        self.current_menu_layout.addWidget(widget)
-
-    def add_ui_legend_(self, names, colors):
-        legend_widget = LegendWidget(names, colors)
-        self.current_menu_layout.addWidget(legend_widget)
-
-    def add_ui_legend(self, names, colors):
-        self.legend_signal.emit(names, colors)
-
-    def set_float_property(self, name, new_value):
-        if name in self.menu_properties:
-            try:
-                self.menu_properties[name].set_value(new_value)
-            except ValueError:
-                return
-        else:
-            return
-
-    def get_float_property(self, name):
-        if name in self.menu_properties:
-            try:
-                float_property = float(self.menu_properties[name].value)
-                return float_property
-            except ValueError:
-                return None
-        else:
-            return None
-
-    def set_column_stretch(self, column, stretch):
-        self.main_layout.setColumnStretch(column + 1, stretch)
-
-    def set_row_stretch(self, row, stretch):
-        self.main_layout.setRowStretch(row, stretch)
-
-    def set_background_color(self, color):
-        self.viewer_palette["viewer_background"] = color
-        self.setStyleSheet(
-            f"background-color: {self.viewer_palette['viewer_background']}"
-        )
-
-    def keyPressEvent(self, e):
-        if e.key() == Qt.Key_Escape:
-            sys.stdout.close()
-            sys.stderr.close()
-            self.close_signal.emit()
-            exit()
-
-    def closeEvent(self, event):
-        self.close_signal.emit()
-
-    def save_screenshot_(self, path):
-        screenshot = QApplication.primaryScreen().grabWindow(
-            self.central_widget.winId()
-        )
-        screenshot.save(path, "png")
-
-    def save_screenshot(self, path):
-        self.screenshot_signal.emit(path)
-
-    def play_video_(self):
-        if not self.playSet:
-            self.playSet = True
-            self.timer_thread.start()
-            self.image_timer_thread.start()
-
-        if self.pause:
-            self.pause = False
-
-    def pause_video_(self):
-        self.pause = True
-
-    def stop_video_(self):
-        self.pause_video_()
-        self.updateSlider(0)
-        self.onSliderUpdate()
-
-    def replay_video_(self):
-        self.updateSlider(0)
-        self.play_video_()
-
-    def pause_video_(self):
-        self.pause = True
-
-    def previous_frame_(self):
-        if self.pause:
-            self.updateSlider(self.slider_frame.value() - 1 if self.slider_frame.value() > self.slider_frame.minimum() else self.slider_frame.value())
-            self.onSliderUpdate()
-            self.updateImages(self.slider_frame.value())
-
-    def next_frame_(self):
-        if self.pause:
-            self.updateSlider(self.slider_frame.value() + 1 if self.slider_frame.value() < self.slider_frame.maximum() else self.slider_frame.maximum())
-            self.onSliderUpdate()
-            self.updateImages(self.slider_frame.value())
-
-    def animate_func(self):
-        #global pts_, vertices_right, faces
-        if not self.pause:
-                new_value = self.slider_frame.value() + 1 if self.slider_frame.value() < self.slider_frame.maximum() - 1 else 0
-                self.updateMesh(new_value)
-                self.updatePlots(new_value)
-                self.updateSlider(new_value)
-
-    def update_images_func(self):
-        #global pts_, vertices_right, faces
-        if not self.pause:
-                self.updateImages(self.slider_frame.value())
-
-    def updateImagesAsync(self, val):
-        animating_thread = threading.Thread(target=self.updateImages, args=[val])
-        animating_thread.start()
-
-    def updateMesh(self, frameNum):
-        self.viewer_widget.update_mesh_vertices(self.mesh_index_left, self.pts_left[frameNum].reshape((-1, 3)).astype(np.float32))
-        self.viewer_widget.update_mesh_vertices(self.mesh_index_right, self.pts_right[frameNum].reshape((-1, 3)).astype(np.float32))
-        self.viewer_widget.update()
-
-    def updateSlider(self, frameNum):
-        self.slider_frame.setValue(frameNum)
-
-    def updatePlots(self, frameNum):
-        self.line_current_playtime_left.setPos(frameNum)
-        self.line_current_playtime_right.setPos(frameNum)
-
-    def onSliderUpdate(self):
-        self.updateMesh(self.slider_frame.value())
-        self.updatePlots(self.slider_frame.value())
-
-    def updateImages(self, frameNum):
-        image = cv2.cvtColor(cv2.rotate(self.images[frameNum], cv2.ROTATE_90_CLOCKWISE), cv2.COLOR_GRAY2BGR)
-        h, w, ch = image.shape
-        bytesPerLine = ch * w
-        qimage = QImage(image.data, w, h, bytesPerLine, QImage.Format_BGR888)
-        #p = image.scaled(256, 512, Qt.KeepAspectRatio)
+            print("Please choose a Segmentation Algorithm")
         
-        segmentation = cv2.cvtColor(cv2.rotate(self.segmentations[frameNum], cv2.ROTATE_90_CLOCKWISE), cv2.COLOR_GRAY2BGR)
-        segmentation = segmentation | image
-        h, w, ch = segmentation.shape
-        bytesPerLine = ch * w
-        qsegmentation = QImage(segmentation.data, w, h, bytesPerLine, QImage.Format_BGR888)
-        #p = image.scaled(256, 512, Qt.KeepAspectRatio)
-        
-        laserdotim = cv2.rotate(self.laserdots[frameNum], cv2.ROTATE_90_CLOCKWISE)
-        h, w, ch = laserdotim.shape
-        bytesPerLine = ch * w
-        qlaserdotim = QImage(laserdotim.data, w, h, bytesPerLine, QImage.Format_BGR888)
+        self.segmentator.generate()
 
-        self.image_main.setPixmap(QPixmap.fromImage(qimage))
-        self.image_segmentation.setPixmap(QPixmap.fromImage(qsegmentation))
-        self.image_laserdots.setPixmap(QPixmap.fromImage(qlaserdotim))
+        x, w, y, h = self.segmentator.getROI()
+        x = x+w//2 - h
+        w = 2*h
+        y = int(y - (h*0.2))
+        h = int(h + (h * 0.4))
+
+        # Use ROI to generate mask image
+        self.roi = np.zeros((self.images[0].shape[0], self.images[0].shape[1]), dtype=np.uint8)
+        self.roi[y:y+h, x:x+w] = 255
+
+        self.frameOfClosedGlottis = self.segmentator.estimateClosedGlottis()
+        vocalfold_image = self.images[self.frameOfClosedGlottis]
+
+        self.maxima = helper.findMaxima(vocalfold_image, self.roi)
+
+        segmentations = list()
+        laserdots = list()
+
+        for image in self.images:
+            base_image = image
+
+            segmentation_image = base_image.copy()
+            segmentation_image = self.segmentator.segment_image(segmentation_image)
+            gml_a, gml_b = self.segmentator.getGlottalMidline(segmentation_image)
+            segmentation_image = cv2.cvtColor(segmentation_image, cv2.COLOR_GRAY2BGR)
+
+            cv2.rectangle(segmentation_image, (x, y), (x+w,y+h), color=(255, 0, 0), thickness=2)
+            cv2.line(segmentation_image, gml_a.astype(np.int32), gml_b.astype(np.int32), color=(125, 125, 0), thickness=2)
+            segmentations.append(cv2.cvtColor(image, cv2.COLOR_GRAY2BGR) | segmentation_image)
+
+            laserdot_image = helper.findMaxima(image, self.roi)
+            laserdot_image = cv2.dilate(laserdot_image, np.ones((3,3)))
+            laserdot_image = np.where(laserdot_image > 0, 255, 0).astype(np.uint8)
+            laserdot_image = cv2.cvtColor(laserdot_image, cv2.COLOR_GRAY2BGR)
+            laserdot_image[:, :, [0, 2]] = 0
+            laserdots.append(cv2.cvtColor(image, cv2.COLOR_GRAY2BGR) | laserdot_image)
+        
+        self.segmentations = segmentations
+        self.laserdots = laserdots
+
+    def buildCorrespondences(self):
+        min_search_space = float(self.menu_widget.getSubmenuValue("RHC", "Minimum Distance"))
+        max_search_space = float(self.menu_widget.getSubmenuValue("RHC", "Maximum Distance"))
+        thresh = float(self.menu_widget.getSubmenuValue("RHC", "GA Thresh"))
+
+        if self.menu_widget.getSubmenuValue("RHC", "Activated"):
+            pixelLocations, laserGridIDs = Correspondences.initialize(self.laser, self.camera, self.maxima, self.images[self.frameOfClosedGlottis], min_search_space, max_search_space)
+            self.grid2DPixLocations = RHC.RHC(laserGridIDs, pixelLocations, self.maxima, self.camera, self.laser)
+        elif self.menu_widget.getSUbmenuValue("Voronoi RHC", "Activated"):
+            cf = VoronoiRHC.CorrespondenceFinder(self.camera, self.laser, minWorkingDistance=min_search_space, maxWorkingDistance=max_search_space, threshold=thresh)
+            correspondences = []
+            vectorized_maxima = np.flip(np.stack(self.maxima.nonzero(), axis=1), axis=1)
+            while len(correspondences) == 0:
+                correspondences = cf.establishCorrespondences(vectorized_maxima)
+
+            self.grid2DPixLocations = [[self.laser.getXYfromN(id), np.flip(pix)] for id, pix in correspondences]
+        
+    def triangulate(self):
+        min_search_space = float(self.menu_widget.getSubmenuValue("RHC", "Minimum Distance"))
+        max_search_space = float(self.menu_widget.getSubmenuValue("RHC", "Maximum Distance"))
+
+        temporalCorrespondence = Correspondences.generateFramewise(self.images, self.frameOfClosedGlottis, self.grid2DPixLocations, self.roi)
+        self.triangulatedPoints = np.array(Triangulation.triangulationMat(self.camera, self.laser, temporalCorrespondence, min_search_space, max_search_space, min_search_space, max_search_space))
+
+        # Add visualization for points here
+        
+    def denseShapeEstimation(self):    
+        zSubdivisions = int(self.menu_widget.getSubmenuValue("Tensor Product M5", "Z Subdivisions"))
+        glottalmidline = self.segmentator.getGlottalMidline(self.images[self.frameOfClosedGlottis])
+
+        self.leftDeformed, self.rightDeformed, self.leftPoints, self.rightPoints = SiliconeSurfaceReconstruction.controlPointBasedARAP(self.triangulatedPoints, self.images, self.camera, self.segmentator, glottalmidline, zSubdivisions=zSubdivisions)
+
+        self.addVocalfoldMeshes(self.leftDeformed, self.rightDeformed, zSubdivisions)
+        self.setMeshes()
+        # Add visualization for dense shape estimation here
+        
+    def lsqOptimization(self):
+        zSubdivisions = int(self.menu_widget.getSubmenuValue("Tensor Product M5", "Z Subdivisions"))
+        iterations = int(self.menu_widget.getSubmenuValue("Least Squares Optimization", "Iterations"))
+        lr = float(self.menu_widget.getSubmenuValue("Least Squares Optimization", "Learning Rate"))
+        window_size = int(self.menu_widget.getSubmenuValue("Temporal Smoothing", "Window Size"))
+
+        self.optimizedLeft = SiliconeSurfaceReconstruction.surfaceOptimization(self.leftDeformed, self.leftPoints, zSubdivisions=zSubdivisions, iterations=iterations, lr=lr)
+        self.optimizedLeft = np.array(self.optimizedLeft)
+        self.smoothedLeft = scipy.ndimage.uniform_filter(self.optimizedLeft, size=(window_size, 1, 1), mode='reflect', cval=0.0, origin=0)
+
+        self.optimizedRight = SiliconeSurfaceReconstruction.surfaceOptimization(self.rightDeformed, self.rightPoints, zSubdivisions=zSubdivisions, iterations=iterations, lr=lr)
+        self.optimizedRight = np.array(self.optimizedRight)
+        self.smoothedRight = scipy.ndimage.uniform_filter(self.optimizedRight, size=(window_size, 1, 1), mode='reflect', cval=0.0, origin=0)
+
+        self.addVocalfoldMeshes(self.smoothedLeft, self.smoothedRight, zSubdivisions)
+        
+    def automaticReconstruction(self):
+        self.segmentImages()
+        self.buildCorrespondences()
+        self.triangulate()
+        self.denseShapeEstimation()
+        self.lsqOptimization()
+        
+
+
+if __name__ == "__main__":
+    viewer_app = QApplication(["Vocal3D - Vocal Fold 3D Reconstruction"])
+    viewer = Viewer()
+    viewer.show()
+
+    # Launch the Qt application
+    viewer_app.exec()

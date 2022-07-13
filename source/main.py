@@ -195,7 +195,7 @@ if __name__ == "__main__":
 
     maxima = helper.findMaxima(vocalfold_image, segmentation)
     # Changing from N x (Y,X) to N x (X,Y)
-    vectorized_maxima = np.flip(np.stack(maxima.nonzero(), axis=1), axis=1)
+    #vectorized_maxima = np.flip(np.stack(maxima.nonzero(), axis=1), axis=1)
 
     pixelLocations, laserGridIDs = Correspondences.initialize(laser, camera, maxima, vocalfold_image, 40.0, 80.0)
     grid2DPixLocations = RHC.RHC(laserGridIDs, pixelLocations, maxima, camera, laser)
