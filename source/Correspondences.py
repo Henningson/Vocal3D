@@ -42,7 +42,7 @@ def generateFramewise(images, closedGlottisFrame, correspondenceEstimate, segmen
     neighbours = NearestNeighbors(n_neighbors=1, algorithm='ball_tree').fit(np.array(correspondenceEstimate)[:, 1])
     xy = np.array([[[-1.0, -1.0], [-1.0, 0.0], [-1.0, 1.0]], [[0.0, -1.0], [0.0, 0.0], [0.0, 1.0]], [[1.0, -1.0], [1.0, 0.0], [1.0, 1.0]]])
     
-    for i in range(closedGlottisFrame + 1, len(images)):
+    for i in range(0, len(images)):
         image = images[i]
 
         maxima = helper.findLocalMaxima(image, 7)

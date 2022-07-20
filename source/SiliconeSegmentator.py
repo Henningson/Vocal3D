@@ -26,10 +26,12 @@ class SiliconeVocalfoldSegmentator:
             contourArray = contour_points[0]
         return contourArray - np.ones(contourArray.shape)
 
-    def getGlottalMidline(self, frame):
-        segmentation = self.segment_image(frame)
+    def getGlottalMidline(self, frame, isSegmented=True):
+        segmentation = frame
+        if not isSegmented:
+            segmentation = self.segment_image(frame)
 
-        white_points = np.argwhere(segmentation == 0)
+        white_points = np.argwhere(segmentation == 255)
 
         if white_points.size == 0:
             return None, None

@@ -35,7 +35,7 @@ def globalAlignment(laserGridStuff, pixelLocations, maxima, laser):
     return grid2DPixLocations
 
 
-def RHC(laserGridStuff, pixelLocations, maxima, camera, laser):
+def RHC(laserGridStuff, pixelLocations, maxima, camera, laser, set_size, iterations):
     grid2DPixLocations = globalAlignment(laserGridStuff, pixelLocations, maxima, laser)   
 
     N = laser.gridHeight() // 2
@@ -46,7 +46,7 @@ def RHC(laserGridStuff, pixelLocations, maxima, camera, laser):
     points2D = [x for _, x in grid2DPixLocations]
 
     DGD = DiscreteGradientDescent.DiscreteGradientDescent(camera, laser, points2D, gridIDs)
-    indexUpdateVector = DGD.RANSAC(8, 30)
+    indexUpdateVector = DGD.RANSAC(set_size, iterations)
 
     grid2DPixLocations = list()
     for i in range(len(gridIDs)):

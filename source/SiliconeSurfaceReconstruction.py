@@ -185,11 +185,12 @@ def getNeighbours(faces, numPoints):
 # Given
 # 3D Points of type NumFrames X NumPoints x 3
 # Calibrated laser object
-def controlPointBasedARAP(triangulatedPoints, images, camera, segmentator, glottalmidline, zSubdivisions=5):
+def controlPointBasedARAP(triangulatedPoints, images, camera, segmentator, zSubdivisions=5):
     left_M5_list = []
     right_M5_list = []
     left_points_list = []
     right_points_list = []
+    combined_points = []
     constrained_vertices_list_left = []
     constrained_vertices_list_right = []
     
@@ -226,86 +227,89 @@ def controlPointBasedARAP(triangulatedPoints, images, camera, segmentator, glott
         alignedPoints = points - centroid
 
         planeNormal = np.linalg.svd(alignedPoints.T)[0][:, -1]
-        
+
         if planeNormal[2] > 0.0:
             planeNormal = -planeNormal
-        
-        #Basic Outlier-Filtering
-        #tree = KDTree(points)
-        #outlierIndices = np.where(np.sum(tree.query(points, k=4)[0][:, 1:], axis=1) / 3 < 1.5)
-        #points = points[outlierIndices]
 
-        rotPlane = helper.rotateAlign(planeNormal/np.linalg.norm(planeNormal), np.array([0.0, 1.0, 0.0]))
-
-    #ax.plot([svd[0], svd[0]*5], [svd[1], svd[1]*5], [svd[2], svd[2]*5], color="black", )
-        alignedPoints = np.matmul(rotPlane, alignedPoints.T).T
-
-        rotatedPlaneNormal = np.matmul(rotPlane, planeNormal)
-
+        #Calculating plane for visualization
         xx, yy = np.meshgrid(range(-2, 2), range(-2, 2))
         # calculate corresponding z
-        z = (-rotatedPlaneNormal[0] * xx - rotatedPlaneNormal[1] * yy - (-np.array([0.0, 0.0, 0.0]).dot(rotatedPlaneNormal))) * 1. / rotatedPlaneNormal[2]
-        
-        upperMidLine, lowerMidLine = glottalmidline
+        z = (-planeNormal[0] * xx - planeNormal[1] * yy - (-centroid[0].dot(planeNormal))) * 1. / planeNormal[2]
+
+        # Project Glottal Outline Points into Pointcloud
         glottalOutline = segmentator.getGlottalOutline(images[i])
         glottalCameraRays = camera.getRayMat(glottalOutline)
-        t = helper.rayPlaneIntersectionMat(centroid, np.expand_dims(planeNormal, 0), np.zeros(glottalCameraRays.shape), glottalCameraRays)
-        glottalOutlinePoints = t * glottalCameraRays - centroid
-        #glottalOutlinePoints[:, 0] = -glottalOutlinePoints[:, 0]
-
-        cameraRay1 = camera.getRay(upperMidLine)
-        cameraRay2 = camera.getRay(lowerMidLine)
+        t = helper.rayPlaneIntersectionMat(centroid, np.expand_dims(planeNormal, 0), np.zeros(glottalCameraRays.shape), glottalCameraRays) 
+        glottalOutlinePoints = t * glottalCameraRays
 
 
-        hit1, t1 = helper.rayPlaneIntersection(centroid, planeNormal, np.array([0.0, 0.0, 0.0]), cameraRay1)
-        hit2, t2 = helper.rayPlaneIntersection(centroid, planeNormal, np.array([0.0, 0.0, 0.0]), cameraRay2)
-        
-        rotGlotMat = helper.rotateAlign(planeNormal/np.linalg.norm(planeNormal), np.array([0.0, 0.0, -1.0]))
-        glottalOutlinePoints = np.matmul(rotGlotMat, glottalOutlinePoints.T).T
+        # Project Glottal Midline Extrema into Pointcloud
+        upperMidLine, lowerMidLine = segmentator.getGlottalMidline(images[i], isSegmented=False)
+        gml_ray1 = camera.getRay(upperMidLine)
+        gml_ray2 = camera.getRay(lowerMidLine)
+        _, t1 = helper.rayPlaneIntersection(centroid[0], planeNormal, np.zeros((3)), gml_ray1) 
+        _, t2 = helper.rayPlaneIntersection(centroid[0], planeNormal, np.zeros((3)), gml_ray2) 
+        gml_point1 = gml_ray1*t1
+        gml_point2 = gml_ray2*t2
+
+        # Get everything into tehe origin
+        glottalOutlinePoints = glottalOutlinePoints - centroid
+        gml_point1 = np.expand_dims(gml_point1, 0) - centroid
+        gml_point2 = np.expand_dims(gml_point2, 0) - centroid
+
+        # Compute rotation matrix, aligning the plane normal to the +Y Axis
+        rotPlane = helper.rotateAlign(planeNormal/np.linalg.norm(planeNormal), np.array([0.0, 1.0, 0.0]))
+
+        # Rotate everything corresponding to that rotation matrix
+        alignedPoints = np.matmul(rotPlane, alignedPoints.T).T
         glottalOutlinePoints = np.matmul(rotPlane, glottalOutlinePoints.T).T
+        gml_point1 = np.matmul(rotPlane, gml_point1.T).T
+        gml_point2 = np.matmul(rotPlane, gml_point2.T).T
 
-        x = glottalOutlinePoints[:, 2]
-        y = glottalOutlinePoints[:, 0]
 
-        A = np.vstack(np.vstack([x, np.ones(len(x))]).T)
-        m, c = np.linalg.lstsq(A, y, rcond=None)[0]
 
-        pointOnPlane1 = np.array([m*x.min() + c, 0.0, x.min()])
-        pointOnPlane2 = np.array([m*x.max() + c, 0.0, x.max()])
-
-        gmplVec = -pointOnPlane1 + pointOnPlane2
+        # Get the angle between the glottal midline and the Z Axis
+        gmplVec = -gml_point1 + gml_point2
         gmplDirection = gmplVec / np.linalg.norm(gmplVec)
         gmplAngle = np.arccos(gmplDirection.dot(np.array([1.0, 0.0, 0.0])))
 
+        # Rotate the Object, such that it is aligned to the Z Axis
         alignedPoints = rotateX(alignedPoints, -gmplAngle, deg=False)
         #visualization.plotPoints3D(alignedPoints)
-        pointOnPlane1 = rotateX(pointOnPlane1, -gmplAngle, deg=False)
-        pointOnPlane2 = rotateX(pointOnPlane2, -gmplAngle, deg=False)
+        gml_point1 = rotateX(gml_point1, -gmplAngle, deg=False)
+        gml_point2 = rotateX(gml_point2, -gmplAngle, deg=False)
         glottalOutlinePoints = rotateX(glottalOutlinePoints, -gmplAngle, deg=False)
 
-        zOffset = pointOnPlane2[2]
+
+        # Move everything, such that the glottal midlie lies directly ontop the Z Axus
+        zOffset = gml_point1[0, 2]
         alignedPoints -= np.array([[0.0, 0.0, zOffset]])
-        pointOnPlane1 -= np.array([0.0, 0.0, zOffset])
-        pointOnPlane2 -= np.array([0.0, 0.0, zOffset])
+        gml_point1 -= np.array([[0.0, 0.0, zOffset]])
+        gml_point2 -= np.array([[0.0, 0.0, zOffset]])
         glottalOutlinePoints -= np.array([0.0, 0.0, zOffset])
 
-        alignedPoints = rotateX(alignedPoints, -90)
-        #alignedPoints = rotateZ(alignedPoints, 180)
-        pointOnPlane1 = rotateX(pointOnPlane1, -90)
-        pointOnPlane2 = rotateX(pointOnPlane2, -90)
-        glottalOutlinePoints = rotateX(glottalOutlinePoints, -90)
+        # Rotate everything around by 90 degrees again
+        alignedPoints = rotateX(alignedPoints, -90).astype(np.float)
+        gml_point1 = rotateX(gml_point1, -90).astype(np.float)
+        gml_point2 = rotateX(gml_point2, -90).astype(np.float)
+        glottalOutlinePoints = rotateX(glottalOutlinePoints, -90).astype(np.float)
 
+
+        # Set Y Values to zero of the glottal outline points
         glottalOutlinePoints[:, 1] = 0.0
 
+        # Move vocal folds down a bit
         alignedPoints -= np.array([[0.0, alignedPoints[:, 1].min()/2.0, 0.0]])
 
+        # Split everything into left and right vocal fold
         splitIndicesLeft = np.where(alignedPoints[:, 0] < 0)
         splitIndicesRight = np.where(alignedPoints[:, 0] >= 0)
 
+        # Save it
         aligned = alignedPoints
-
         leftPoints = aligned[splitIndicesLeft]
         rightPoints = aligned[splitIndicesRight]
+
 
         # Find X-Y-Z Extent of Vocalfolds to generate fitting M5 Model
         if first:
@@ -381,6 +385,7 @@ def controlPointBasedARAP(triangulatedPoints, images, camera, segmentator, glott
         #right_points_list.append(np.concatenate([rightPoints, glottalOutlinePoints[np.where(glottalOutlinePoints[:, 0] >= 0)]], axis=0))
         left_points_list.append(leftPoints)
         right_points_list.append(rightPoints)
+        combined_points.append(np.concatenate([leftPoints, rightPoints]))
 
     copied_M5_left = np.expand_dims(np.array(M5_Left), 0).repeat(len(arap_c_left_list), axis=0)
     copied_M5_right = np.expand_dims(np.array(M5_Right), 0).repeat(len(arap_c_left_list), axis=0)
@@ -395,7 +400,7 @@ def controlPointBasedARAP(triangulatedPoints, images, camera, segmentator, glott
     ARAP_timer.stop()
     print("ARAPing {0} Frames takes: {1}s".format(len(triangulatedPoints), ARAP_timer.getAverage()))
 
-    return left_M5_list, right_M5_list, left_points_list, right_points_list
+    return left_M5_list, right_M5_list, left_points_list, right_points_list, combined_points
 
 
 # Finds the np array with the least amount of points

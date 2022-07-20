@@ -10,7 +10,7 @@ class PointBasedGridSearch:
         self.rightVector = np.array([0.0, 1.0])
         self.leftVector = np.array([0.0, -1.0])
 
-        self.epsilon = 5.0
+        self.epsilon = 3.0
 
         self.laserDims = laserDims
 

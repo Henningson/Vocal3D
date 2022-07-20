@@ -2,6 +2,11 @@ import sys
 import copy
 import time
 import threading
+
+import sys
+sys.path.append(".")
+sys.path.append("source/")
+
 import Mesh
 import igl
 import scipy
@@ -38,8 +43,6 @@ from PyQt5.QtWidgets import (
     QFileDialog
 )
 
-import sys
-sys.path.append(".")
 import Camera
 import Laser
 import helper
@@ -92,7 +95,7 @@ class VideoPlayerWidget(QWidget):
         self.bPrevious = QPushButton("Previous Frame")
         self.bNext = QPushButton("Next Frame")
 
-        self.play = True
+        self.play = False
         
         self.bPlay.clicked.connect(self.play_video_)
         self.bPause.clicked.connect(self.pause_video_)
@@ -167,6 +170,7 @@ class OpenCloseSaveWidget(QWidget):
         self.layout().addWidget(button)
 
     def open(self):
+        print("HURENSOHN")
         self.camera_calib_path, _ = QFileDialog.getOpenFileName(self, 'Open Camera Calibration file', '', "Camera Calibration Files (*.json *.mat)")
         self.laser_calib_path, _ = QFileDialog.getOpenFileName(self, 'Open Laser Calibration file', '', "Laser Calibration Files (*.json *.mat)")
         self.video_path, _ = QFileDialog.getOpenFileName(self, 'Open Video', '', "Video Files (*.avi *.mp4 *.mkv *.AVI *.MP4)")
@@ -391,12 +395,11 @@ class Viewer(QWidget):
         self.left_vf_triangulated = None
         self.right_vf_triangulated = None
 
-        self.left_vf_mesh = None
-        self.right_vf_mesh = None
-
         self.plots_set = False
         self.meshes_set = False
         self.images_set = False
+
+        self.obj_ids = {"LeftVF": None, "RightVF": None, "LeftVFOpt": None, "RightVFOpt": None, "PointCloud": None}
 
         self.main_layout = QHBoxLayout(self)
 
@@ -515,72 +518,72 @@ class Viewer(QWidget):
 
     def updateMesh(self, frameNum):
         if self.meshes_set:
-            self.viewer_widget.update_mesh_vertices(self.mesh_index_left, self.pts_left[frameNum].reshape((-1, 3)).astype(np.float32))
-            self.viewer_widget.update_mesh_vertices(self.mesh_index_right, self.pts_right[frameNum].reshape((-1, 3)).astype(np.float32))
+            self.viewer_widget.update_mesh_vertices(self.obj_ids["LeftVF"], self.pts_left[frameNum].reshape((-1, 3)).astype(np.float32))
+            self.viewer_widget.update_mesh_vertices(self.obj_ids["RightVF"], self.pts_right[frameNum].reshape((-1, 3)).astype(np.float32))
             self.viewer_widget.update()
 
     def updatePlots(self, frameNum):
         if self.plots_set:
             self.graph_widget.updateLines(frameNum)
 
+    def addPointCloud(self, points):
+        self.pc_id = self.viewer_widget.display_point_cloud(points)
+
     def addVocalfoldMeshes(self, points_left, points_right, zSubdivisions):
-        self.pts_left, self.pts_right, self.faces = Mesh.generate_BM5_mesh(points_left, points_right, zSubdivisions)
-        vertices_left = self.pts_left[0].reshape((-1, 3))
-        vertices_right = self.pts_right[0].reshape((-1, 3))
+        self.pts_left, self.pts_right, faces = Mesh.generate_BM5_mesh(points_left, points_right, zSubdivisions)
+        vertices_left = self.pts_left[self.player_widget.getCurrentFrame()].reshape((-1, 3))
+        vertices_right = self.pts_right[self.player_widget.getCurrentFrame()].reshape((-1, 3))
+
+        if self.obj_ids["RightVF"] is not None:
+            self.viewer_widget.remove_mesh(self.obj_ids["RightVF"])
+
+        if self.obj_ids["LeftVF"] is not None:
+            self.viewer_widget.remove_mesh(self.obj_ids["LeftVF"])
+
 
         self.graph_widget.updateGraphs(np.array(points_right)[:, :, 1].max(axis=1), np.array(points_left)[:, :, 1].max(axis=1), np.array(points_left)[:, :, 1].max(axis=1))
         self.setPlots()
 
-        self.uniforms = {}
-        self.vertex_attributes_left = {}
-        self.face_attributes_left = {}
-        self.vertex_attributes_right = {}
-        self.face_attributes_right = {}
+        uniforms = {}
+        vertex_attributes_left = {}
+        face_attributes_left = {}
+        face_attributes_right = {}
+        vertex_attributes_right = {}
 
-        #uniforms["albedo"] = np.array([1.0, 0.6, 0.2])
-        self.uniforms["minmax"] = np.array([np.concatenate([self.pts_left, self.pts_right]).reshape((-1, 3))[:, 1].min(), np.concatenate([self.pts_left, self.pts_right]).reshape((-1, 3))[:, 1].max()])
-        #uniforms["k_ambient"] = np.array([0.0, 0.0, 0.0])
-        #uniforms["k_specular"] = np.array([1.0, 1.0, 1.0])
-        #uniforms["shininess"] = np.array([50.0])
+        uniforms["minmax"] = np.array([np.concatenate([self.pts_left, self.pts_right]).reshape((-1, 3))[:, 1].min(), np.concatenate([self.pts_left, self.pts_right]).reshape((-1, 3))[:, 1].max()])
 
-        # If we want flat shading with normals defined per face.
-        #face_normals = igl.per_face_normals(vertices.astype(np.float64), faces, np.array([1.0, 1.0, 1.0])).astype(
-        #    np.float32
-        #)
-        #face_attributes["normal"] = face_normals
+        vertex_normals_left = igl.per_vertex_normals(vertices_left, faces, igl.PER_VERTEX_NORMALS_WEIGHTING_TYPE_AREA).astype(np.float32)
+        vertex_attributes_left['normal'] = vertex_normals_left
 
-        # If we want smooth shading with normals defined per vertex.
-        self.vertex_normals_left = igl.per_vertex_normals(vertices_left, self.faces, igl.PER_VERTEX_NORMALS_WEIGHTING_TYPE_AREA).astype(np.float32)
-        self.vertex_attributes_left['normal'] = self.vertex_normals_left
-
-        vertex_normals_right = igl.per_vertex_normals(vertices_right, self.faces, igl.PER_VERTEX_NORMALS_WEIGHTING_TYPE_AREA).astype(np.float32)
-        self.vertex_attributes_right['normal'] = vertex_normals_right
-
-        self.mesh_index_left = self.viewer_widget.add_mesh(vertices_left, self.faces)
-        self.mesh_prefab_index_left = self.viewer_widget.add_mesh_prefab(
-            self.mesh_index_left,
+        vertex_normals_right = igl.per_vertex_normals(vertices_right, faces, igl.PER_VERTEX_NORMALS_WEIGHTING_TYPE_AREA).astype(np.float32)
+        vertex_attributes_right['normal'] = vertex_normals_right
+        
+        mesh_index_left = self.viewer_widget.add_mesh(vertices_left, faces)
+        self.obj_ids["LeftVF"] = self.viewer_widget.add_mesh_prefab(
+            mesh_index_left,
             "colormap",
-            vertex_attributes=self.vertex_attributes_left,
-            face_attributes=self.face_attributes_left,
-            uniforms=self.uniforms,
+            vertex_attributes=vertex_attributes_left,
+            face_attributes=face_attributes_left,
+            uniforms=uniforms,
         )
-        self.instance_index_left = self.viewer_widget.add_mesh_instance(
-            self.mesh_prefab_index_left, np.eye(4, dtype="f")
+        instance_index_left = self.viewer_widget.add_mesh_instance(
+            self.obj_ids["LeftVF"], np.eye(4, dtype="f")
         )
-        self.viewer_widget.add_wireframe(self.instance_index_left, line_color=np.array([0.1, 0.1, 0.1]))
+        self.viewer_widget.add_wireframe(instance_index_left, line_color=np.array([0.1, 0.1, 0.1]))
 
-        self.mesh_index_right = self.viewer_widget.add_mesh(vertices_right, self.faces)
-        self.mesh_prefab_index_right = self.viewer_widget.add_mesh_prefab(
-            self.mesh_index_right,
+        mesh_index_right = self.viewer_widget.add_mesh(vertices_right, faces)
+        self.obj_ids["RightVF"] = self.viewer_widget.add_mesh_prefab(
+            mesh_index_right,
             "colormap",
-            vertex_attributes=self.vertex_attributes_right,
-            face_attributes=self.face_attributes_right,
-            uniforms=self.uniforms,
+            vertex_attributes=vertex_attributes_right,
+            face_attributes=face_attributes_right,
+            uniforms=uniforms,
         )
-        self.instance_index_right = self.viewer_widget.add_mesh_instance(
-            self.mesh_prefab_index_right, np.eye(4, dtype="f")
+        instance_index_right = self.viewer_widget.add_mesh_instance(
+            self.obj_ids["RightVF"], np.eye(4, dtype="f")
         )
-        self.viewer_widget.add_wireframe(self.instance_index_right, line_color=np.array([0.1, 0.1, 0.1]))
+
+        self.viewer_widget.add_wireframe(instance_index_right, line_color=np.array([0.1, 0.1, 0.1]))
 
     def setImages(self):
         self.images_set = True
@@ -630,6 +633,12 @@ class Viewer(QWidget):
         y = int(y - (h*0.2))
         h = int(h + (h * 0.4))
 
+        if y+h >= self.images[0].shape[0]:
+            h = self.images[0].shape[0] - y - 2
+        if x+w >= self.images[0].shape[1]:
+            w = self.images[0].shape[1] - x - 2
+
+
         # Use ROI to generate mask image
         self.roi = np.zeros((self.images[0].shape[0], self.images[0].shape[1]), dtype=np.uint8)
         self.roi[y:y+h, x:x+w] = 255
@@ -648,6 +657,10 @@ class Viewer(QWidget):
             segmentation_image = base_image.copy()
             segmentation_image = self.segmentator.segment_image(segmentation_image)
             gml_a, gml_b = self.segmentator.getGlottalMidline(segmentation_image)
+
+            if self.menu_widget.getSubmenuValue("Segmentation", "Koc et al"):
+                segmentation_image = self.segmentator.gen_segmentation_image(segmentation_image)
+
             segmentation_image = cv2.cvtColor(segmentation_image, cv2.COLOR_GRAY2BGR)
 
             cv2.rectangle(segmentation_image, (x, y), (x+w,y+h), color=(255, 0, 0), thickness=2)
@@ -668,10 +681,12 @@ class Viewer(QWidget):
         min_search_space = float(self.menu_widget.getSubmenuValue("RHC", "Minimum Distance"))
         max_search_space = float(self.menu_widget.getSubmenuValue("RHC", "Maximum Distance"))
         thresh = float(self.menu_widget.getSubmenuValue("RHC", "GA Thresh"))
+        set_size = int(self.menu_widget.getSubmenuValue("RHC", "Consensus Size"))
+        iterations = int(self.menu_widget.getSubmenuValue("RHC", "Iterations"))
 
         if self.menu_widget.getSubmenuValue("RHC", "Activated"):
             pixelLocations, laserGridIDs = Correspondences.initialize(self.laser, self.camera, self.maxima, self.images[self.frameOfClosedGlottis], min_search_space, max_search_space)
-            self.grid2DPixLocations = RHC.RHC(laserGridIDs, pixelLocations, self.maxima, self.camera, self.laser)
+            self.grid2DPixLocations = RHC.RHC(laserGridIDs, pixelLocations, self.maxima, self.camera, self.laser, set_size, iterations)
         elif self.menu_widget.getSUbmenuValue("Voronoi RHC", "Activated"):
             cf = VoronoiRHC.CorrespondenceFinder(self.camera, self.laser, minWorkingDistance=min_search_space, maxWorkingDistance=max_search_space, threshold=thresh)
             correspondences = []
@@ -687,18 +702,16 @@ class Viewer(QWidget):
 
         temporalCorrespondence = Correspondences.generateFramewise(self.images, self.frameOfClosedGlottis, self.grid2DPixLocations, self.roi)
         self.triangulatedPoints = np.array(Triangulation.triangulationMat(self.camera, self.laser, temporalCorrespondence, min_search_space, max_search_space, min_search_space, max_search_space))
-
-        # Add visualization for points here
         
     def denseShapeEstimation(self):    
         zSubdivisions = int(self.menu_widget.getSubmenuValue("Tensor Product M5", "Z Subdivisions"))
-        glottalmidline = self.segmentator.getGlottalMidline(self.images[self.frameOfClosedGlottis])
+        #glottalmidline = self.segmentator.getGlottalMidline(self.images[self.frameOfClosedGlottis])
 
-        self.leftDeformed, self.rightDeformed, self.leftPoints, self.rightPoints = SiliconeSurfaceReconstruction.controlPointBasedARAP(self.triangulatedPoints, self.images, self.camera, self.segmentator, glottalmidline, zSubdivisions=zSubdivisions)
+        self.leftDeformed, self.rightDeformed, self.leftPoints, self.rightPoints, self.pointclouds = SiliconeSurfaceReconstruction.controlPointBasedARAP(self.triangulatedPoints, self.images, self.camera, self.segmentator, zSubdivisions=zSubdivisions)
+        self.addPointCloud(self.pointclouds[0])
 
         self.addVocalfoldMeshes(self.leftDeformed, self.rightDeformed, zSubdivisions)
         self.setMeshes()
-        # Add visualization for dense shape estimation here
         
     def lsqOptimization(self):
         zSubdivisions = int(self.menu_widget.getSubmenuValue("Tensor Product M5", "Z Subdivisions"))
