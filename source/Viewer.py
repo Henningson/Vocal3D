@@ -1,32 +1,6 @@
-import sys
-import copy
-import time
-import threading
-
-import sys
-sys.path.append(".")
-sys.path.append("source/")
-
-import Mesh
-import igl
-import scipy
-
-from PyIGL_viewer.viewer.viewer_widget import ViewerWidget
-from PyIGL_viewer.viewer.ui_widgets import PropertyWidget, LegendWidget
-from pyqtgraph.widgets.RawImageWidget import RawImageGLWidget
-from PyIGL_viewer.mesh.mesh import GlMeshPrefab, GlMeshPrefabId
-from random import randint
-
-import cv2
-
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QThread
-from PyQt5.QtGui import QImage, QPixmap, QFont
-from pyqtgraph import PlotWidget, plot
-import pyqtgraph as pg
-import numpy as np
+from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtWidgets import (
-    QApplication,
-    QMainWindow,
     QWidget,
     QFrame,
     QVBoxLayout,
@@ -35,14 +9,23 @@ from PyQt5.QtWidgets import (
     QGridLayout,
     QPushButton,
     QLabel,
-    QMenuBar,
-    QMenu,
     QFormLayout,
     QLineEdit,
     QCheckBox,
     QFileDialog
 )
 
+import igl
+import scipy
+import cv2
+
+import pyqtgraph as pg
+import numpy as np
+
+from PyIGL_viewer.viewer.viewer_widget import ViewerWidget
+from VocalfoldHSVSegmentation import vocalfold_segmentation
+
+import Mesh
 import Camera
 import Laser
 import helper
@@ -52,7 +35,6 @@ import VoronoiRHC
 import Correspondences
 import Triangulation
 import SiliconeSurfaceReconstruction
-from VocalfoldHSVSegmentation import vocalfold_segmentation
 
 pg.setConfigOption('imageAxisOrder', 'row-major')
 
@@ -63,6 +45,7 @@ class QHLine(QFrame):
         self.setFrameShape(QFrame.HLine)
         self.setFrameShadow(QFrame.Sunken)
         self.setStyleSheet("background-color: #999999;")
+
 
 class QVLine(QFrame):
     def __init__(self):
@@ -152,6 +135,7 @@ class VideoPlayerWidget(QWidget):
 
     def getCurrentFrame(self):
         return self.slider.value()
+
 
 class OpenCloseSaveWidget(QWidget):
     fileOpenedSignal = pyqtSignal(str, str, str)
@@ -788,13 +772,3 @@ class Viewer(QWidget):
         self.triangulate()
         self.denseShapeEstimation()
         self.lsqOptimization()
-        
-
-
-if __name__ == "__main__":
-    viewer_app = QApplication(["Vocal3D - Vocal Fold 3D Reconstruction"])
-    viewer = Viewer()
-    viewer.show()
-
-    # Launch the Qt application
-    viewer_app.exec()
