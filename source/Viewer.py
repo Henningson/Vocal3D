@@ -161,6 +161,7 @@ class OpenCloseSaveWidget(QWidget):
         self.setLayout(QHBoxLayout())
 
         self.addButton("Open", self.open)
+        self.addButton("New Video", self.openVideo)
         self.addButton("Load", self.open)
         self.addButton("Save", self.open)
 
@@ -170,9 +171,12 @@ class OpenCloseSaveWidget(QWidget):
         self.layout().addWidget(button)
 
     def open(self):
-        print("HURENSOHN")
         self.camera_calib_path, _ = QFileDialog.getOpenFileName(self, 'Open Camera Calibration file', '', "Camera Calibration Files (*.json *.mat)")
         self.laser_calib_path, _ = QFileDialog.getOpenFileName(self, 'Open Laser Calibration file', '', "Laser Calibration Files (*.json *.mat)")
+        self.video_path, _ = QFileDialog.getOpenFileName(self, 'Open Video', '', "Video Files (*.avi *.mp4 *.mkv *.AVI *.MP4)")
+        self.fileOpenedSignal.emit(self.camera_calib_path, self.laser_calib_path, self.video_path)
+
+    def openVideo(self):
         self.video_path, _ = QFileDialog.getOpenFileName(self, 'Open Video', '', "Video Files (*.avi *.mp4 *.mkv *.AVI *.MP4)")
         self.fileOpenedSignal.emit(self.camera_calib_path, self.laser_calib_path, self.video_path)
 
@@ -321,6 +325,8 @@ class ImageViewerWidget(QWidget):
         self.addImageWidget("Segmentation", (256, 512))
         self.base_layout.addWidget(QVLine())
         self.addImageWidget("Laserdots", (256, 512))
+        self.base_layout.addWidget(QVLine())
+        self.addImageWidget("Closed Vocal Folds", (256, 512))
 
     def addImageWidget(self, title, size):
         widg = QWidget(self)
@@ -359,6 +365,9 @@ class ImageViewerWidget(QWidget):
         
     def updateImage(self, image, widget):
         widget.setPixmap(QPixmap.fromImage(self.convertImage(image)))
+
+    def getWidget(self, key):
+        return self.imageDICT[key]
 
 
 class Viewer(QWidget):
@@ -399,7 +408,12 @@ class Viewer(QWidget):
         self.meshes_set = False
         self.images_set = False
 
-        self.obj_ids = {"LeftVF": None, "RightVF": None, "LeftVFOpt": None, "RightVFOpt": None, "PointCloud": None}
+        self.obj_ids = {"LeftVF": None, "RightVF": None, "LeftVFOpt": None, "RightVFOpt": None}
+        self.point_cloud_mesh_core = None
+        self.point_cloud_id = None
+        self.point_cloud_offsets = []
+        self.point_cloud_elements = []
+
 
         self.main_layout = QHBoxLayout(self)
 
@@ -448,6 +462,8 @@ class Viewer(QWidget):
 
         self.image_timer_thread = QThread(self)
         self.image_timer_thread.started.connect(self.gen_image_timer_thread)
+
+        self.player_widget.slider.valueChanged.connect(self.updatePointCloud)
 
         self.timer_thread.start()
         self.image_timer_thread.start()
@@ -508,26 +524,38 @@ class Viewer(QWidget):
         self.close_signal.emit()
 
     def animate_func(self):
-        self.updateMesh(self.player_widget.getCurrentFrame())
-        self.updatePlots(self.player_widget.getCurrentFrame())
+        curr_frame = self.player_widget.getCurrentFrame()
+        
+        if curr_frame == self.player_widget.slider.maximum():
+            return
+
+        self.updateMesh(curr_frame)
+        self.updatePlots(curr_frame)
 
     def update_images_func(self):
         if self.images_set:
             curr_frame = self.player_widget.getCurrentFrame()
+
+            if curr_frame == self.player_widget.slider.maximum():
+                return
+
             self.image_widget.updateImages(self.images[curr_frame], self.segmentations[curr_frame], self.laserdots[curr_frame])
 
     def updateMesh(self, frameNum):
         if self.meshes_set:
             self.viewer_widget.update_mesh_vertices(self.obj_ids["LeftVF"], self.pts_left[frameNum].reshape((-1, 3)).astype(np.float32))
             self.viewer_widget.update_mesh_vertices(self.obj_ids["RightVF"], self.pts_right[frameNum].reshape((-1, 3)).astype(np.float32))
+            self.updatePointCloud(frameNum)
             self.viewer_widget.update()
 
     def updatePlots(self, frameNum):
         if self.plots_set:
             self.graph_widget.updateLines(frameNum)
 
-    def addPointCloud(self, points):
-        self.pc_id = self.viewer_widget.display_point_cloud(points)
+    def updatePointCloud(self, frameNum):
+        self.point_cloud_mesh_core.offset = self.point_cloud_offsets[self.player_widget.slider.value()]
+        self.point_cloud_mesh_core.number_elements = self.point_cloud_elements[self.player_widget.slider.value()]
+
 
     def addVocalfoldMeshes(self, points_left, points_right, zSubdivisions):
         self.pts_left, self.pts_right, faces = Mesh.generate_BM5_mesh(points_left, points_right, zSubdivisions)
@@ -585,6 +613,11 @@ class Viewer(QWidget):
 
         self.viewer_widget.add_wireframe(instance_index_right, line_color=np.array([0.1, 0.1, 0.1]))
 
+    def toggleVisibility(self, instance_id):
+        mesh_instance = self.viewer_widget.get_mesh_instance(instance_id)
+        mesh_instance.set_visibility(not mesh_instance.get_visibility())
+        self.viewer_widget.update()
+
     def setImages(self):
         self.images_set = True
 
@@ -628,16 +661,6 @@ class Viewer(QWidget):
         self.segmentator.generate()
 
         x, w, y, h = self.segmentator.getROI()
-        x = x+w//2 - h
-        w = 2*h
-        y = int(y - (h*0.2))
-        h = int(h + (h * 0.4))
-
-        if y+h >= self.images[0].shape[0]:
-            h = self.images[0].shape[0] - y - 2
-        if x+w >= self.images[0].shape[1]:
-            w = self.images[0].shape[1] - x - 2
-
 
         # Use ROI to generate mask image
         self.roi = np.zeros((self.images[0].shape[0], self.images[0].shape[1]), dtype=np.uint8)
@@ -664,7 +687,10 @@ class Viewer(QWidget):
             segmentation_image = cv2.cvtColor(segmentation_image, cv2.COLOR_GRAY2BGR)
 
             cv2.rectangle(segmentation_image, (x, y), (x+w,y+h), color=(255, 0, 0), thickness=2)
-            cv2.line(segmentation_image, gml_a.astype(np.int32), gml_b.astype(np.int32), color=(125, 125, 0), thickness=2)
+            try:
+                cv2.line(segmentation_image, gml_a.astype(np.int32), gml_b.astype(np.int32), color=(125, 125, 0), thickness=2)
+            except:
+                pass
             segmentations.append(cv2.cvtColor(image, cv2.COLOR_GRAY2BGR) | segmentation_image)
 
             laserdot_image = helper.findMaxima(image, self.roi)
@@ -695,6 +721,17 @@ class Viewer(QWidget):
                 correspondences = cf.establishCorrespondences(vectorized_maxima)
 
             self.grid2DPixLocations = [[self.laser.getXYfromN(id), np.flip(pix)] for id, pix in correspondences]
+
+        pixel_coords = np.array(self.grid2DPixLocations)[:, 1, :].astype(np.int32)
+        debug_img = np.zeros(self.images[0].shape, np.uint8)
+        debug_img[pixel_coords[:, 0], pixel_coords[:, 1]] = 255
+        debug_img = cv2.dilate(debug_img, np.ones((3,3)))
+
+        base_img = self.images[self.frameOfClosedGlottis]
+        base_img = cv2.cvtColor(base_img, cv2.COLOR_GRAY2BGR)
+        base_img = base_img | cv2.cvtColor(debug_img, cv2.COLOR_GRAY2BGR)
+        
+        self.image_widget.updateImage(base_img, self.image_widget.getWidget("Closed Vocal Folds"))
         
     def triangulate(self):
         min_search_space = float(self.menu_widget.getSubmenuValue("RHC", "Minimum Distance"))
@@ -702,13 +739,29 @@ class Viewer(QWidget):
 
         temporalCorrespondence = Correspondences.generateFramewise(self.images, self.frameOfClosedGlottis, self.grid2DPixLocations, self.roi)
         self.triangulatedPoints = np.array(Triangulation.triangulationMat(self.camera, self.laser, temporalCorrespondence, min_search_space, max_search_space, min_search_space, max_search_space))
+
         
     def denseShapeEstimation(self):    
         zSubdivisions = int(self.menu_widget.getSubmenuValue("Tensor Product M5", "Z Subdivisions"))
         #glottalmidline = self.segmentator.getGlottalMidline(self.images[self.frameOfClosedGlottis])
 
+        if self.point_cloud_id is not None:
+            self.viewer_widget.remove_mesh(self.point_cloud_id)
+
         self.leftDeformed, self.rightDeformed, self.leftPoints, self.rightPoints, self.pointclouds = SiliconeSurfaceReconstruction.controlPointBasedARAP(self.triangulatedPoints, self.images, self.camera, self.segmentator, zSubdivisions=zSubdivisions)
-        self.addPointCloud(self.pointclouds[0])
+
+        self.point_cloud_offsets = [0]
+        self.point_cloud_elements = [self.pointclouds[0].shape[0]]
+
+        for pc in self.pointclouds[1:]:
+            num_verts = pc.shape[0]
+            self.point_cloud_offsets.append(self.point_cloud_offsets[-1] + num_verts)
+            self.point_cloud_elements.append(num_verts)
+
+        super_point_cloud = np.concatenate(self.pointclouds, axis=0)
+        self.point_cloud_id = self.viewer_widget.display_point_cloud(super_point_cloud)
+        self.viewer_widget.process_mesh_events()
+        self.point_cloud_mesh_core = self.viewer_widget.get_mesh(self.point_cloud_id).mesh_core
 
         self.addVocalfoldMeshes(self.leftDeformed, self.rightDeformed, zSubdivisions)
         self.setMeshes()

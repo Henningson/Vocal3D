@@ -68,6 +68,22 @@ class SiliconeVocalfoldSegmentator:
         self.roiWidth = sorted_stats[-2][1][2]
         self.roiHeight = sorted_stats[-2][1][3]
 
+        self.roiX = self.roiX+self.roiWidth//2 - self.roiHeight
+        self.roiWidth = 2*self.roiHeight
+        self.roiY = int(self.roiY - (self.roiHeight*0.2))
+        self.roiHeight = int(self.roiHeight + (self.roiHeight * 0.4))
+
+        if self.roiY < 0:
+            self.roiY = 0
+
+        if self.roiX < 0:
+            self.roiX = 0
+
+        if self.roiY+self.roiHeight >= self.images[0].shape[0]:
+            self.roiHeight = self.images[0].shape[0] - self.roiY - 2
+        if self.roiX+self.roiWidth >= self.images[0].shape[1]:
+            self.roiWidth = self.images[0].shape[1] - self.roiX - 2
+
     def getROI(self):
         return self.roiX, self.roiWidth, self.roiY, self.roiHeight
 

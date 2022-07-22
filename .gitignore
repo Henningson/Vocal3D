@@ -127,3 +127,12 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+#Misc
+.vscode*
+NURBS_Diff*
+assets/
+*.deb
+*.deb*
+*.run
+*.obj
