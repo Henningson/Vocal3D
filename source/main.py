@@ -1,6 +1,6 @@
 import sys
-sys.path.append(".")
 sys.path.append("source/")
+sys.path.append("source/GUI/")
 
 from PyQt5.QtWidgets import QApplication
 import Viewer
