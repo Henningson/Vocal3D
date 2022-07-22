@@ -72,7 +72,7 @@ python setup.py install
 An example video and calibration files are given in the assets folder.
 Unzip the example folder with `unzip assets/sample_data.zip -d assets/` and run the example using
 ```
-python source/main.py -v assets/example_vid.avi -l assets/laser_calibration.json -c assets/camera_calibration --silicone
+python source/main.py
 ```
 
 ## Citation
