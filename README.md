@@ -9,7 +9,7 @@
 # Vocal3D
 **Vocal3D** is a library for the real-time reconstruction of human vocal folds using a single shot structured light system.
 This is a joint work of the <a href="https://www.lgdv.tf.fau.de/">Chair of Visual Computing</a> of the Friedrich-Alexander University of Erlangen-Nuremberg and the <a href="https://www.hno-klinik.uk-erlangen.de/phoniatrie/">Phoniatric Division</a> of the University Hospital Erlangen. 
-This code accompanies the paper <a href="https://github.com/Henningson/Vocal3D/blob/main/assets/Paper.pdf">Real-Time 3D Reconstruction of Human Vocal Folds via High-Speed Laser-Endoscopy</a>.
+This code accompanies the paper <a href="https://henningson.github.io/Vocal3D/assets/Paper.pdf">Real-Time 3D Reconstruction of Human Vocal Folds via High-Speed Laser-Endoscopy</a>.
 
 ![Example](images/reco_example.gif)
 
