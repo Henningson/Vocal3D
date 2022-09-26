@@ -77,7 +77,7 @@ python source/main.py
 
 ## Things to note
 If you are using the supplied viewer, please note that the pipeline will generally be not as performant, as every step of the pipeline will be computed in succession (for every frame separately).
-However, you will still be able to generate results in a matter of seconds, provided you use somewhat recent/decent hardware.
+However, you will still be able to generate results in a matter of seconds, provided you do not use a PC that is barely able to run MS-DOS. 
 
 ## Limitations
 Due to the moisture on top of human vocal folds, the mucuous tissue of in-vivo data often generates specular highlights that influences the performance of segmentation algorithms.
