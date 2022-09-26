@@ -74,3 +74,12 @@ Unzip the example folder with `unzip assets/sample_data.zip -d assets/` and run 
 ```
 python source/main.py
 ```
+
+## Things to note
+If you are using the supplied viewer, please note that the pipeline will generally be not as performant, as every step of the pipeline will be computed in succession (for every frame separately).
+However, you will still be able to generate results in a matter of seconds, provided you use somewhat recent/decent hardware.
+
+## Limitations
+Due to the moisture on top of human vocal folds, the mucuous tissue of in-vivo data often generates specular highlights that influences the performance of segmentation algorithms.
+Furthermore, the segmentation algorithm by Koc et al. that we supply in this repository requires well captured data, in which the glottis can be accurately differentiated from the vocal folds.
+As of right now, we are working on a system-specific segmentation algorithm, that can deal with these harsh cases.
