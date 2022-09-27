@@ -27,13 +27,9 @@ class KocSegmentator(BaseSegmentator):
                 self.images[i] = self.enhanceContrast(image)
 
         self.numImages = numImages
-
         self.gaussianMixture = None
-
         self.illum = None
-
         self.intensityMap = None
-
         self.generateSegmentationData()
 
     def segmentImage(self, image):
