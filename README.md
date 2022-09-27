@@ -76,7 +76,7 @@ python source/main.py
 ```
 
 ## Things to note
-If you are using the supplied viewer, please note that the pipeline will generally be not as performant, as every step of the pipeline will be computed in succession (for every frame separately).
+If you are using the supplied viewer, please note that the pipeline will generally be not as performant, as every step of the pipeline will be computed in succession (think of it more like a debug view).
 However, you will still be able to generate results in a matter of seconds, provided you do not use a PC that is barely able to run MS-DOS. :grin:
 
 ## Limitations
