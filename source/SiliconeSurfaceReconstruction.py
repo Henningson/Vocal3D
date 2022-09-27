@@ -33,6 +33,10 @@ import ARAP
 
 
 
+from pycallgraph import PyCallGraph
+from pycallgraph.output import GraphvizOutput
+
+
 
 from PyQt5.QtWidgets import QApplication
 import Viewer
@@ -62,35 +66,9 @@ def alignPointData(triangulatedPoints, laser):
     centroid = np.expand_dims(np.sum(triangulatedPoints, axis=0) / triangulatedPoints.shape[0], 0)
     alignedPoints = triangulatedPoints - centroid
 
-    #fig = plt.figure()
-    #ax = fig.add_subplot(121, projection='3d')
-    #ax.scatter(alignedPoints[:, 0], alignedPoints[:, 1], alignedPoints[:, 2])
-    #ax.set_xlabel('X-axis')
-    #ax.set_ylabel('Y-axis')
-    #ax.set_zlabel('Z-axis')
-    #ax2 = fig.add_subplot(122)
-    #projectedPoints = np.array([alignedPoints[:, 0], alignedPoints[:, 2]]).T
-    #ax2.scatter(projectedPoints[:, 0], projectedPoints[:, 1])
-    #line = cv2.fitLine(projectedPoints, cv2.DIST_L2, 0, 0.01, 0.01)
-    #xy = line.squeeze()[0:2]
-    #vxvy = line.squeeze()[2:4]
-
-    #p1 = xy * -10.0*vxvy
-    #p2 = xy * 10.0*vxvy
-
-    #angle = np.arctan2(p2[1] - p1[1], p2[0] - p1[0])
-
     svd = np.linalg.svd(alignedPoints.T)[0][:, -1]
     rotPlane = rotation_matrix_from_vectors(svd, np.array([0.0, -1.0, 0.0]))
-
-    #ax.plot([svd[0], svd[0]*5], [svd[1], svd[1]*5], [svd[2], svd[2]*5], color="black", )
     alignedPoints = np.matmul(alignedPoints, np.linalg.inv(rotPlane))
-
-    #ax.scatter(alignedPoints[:, 0], alignedPoints[:, 1], alignedPoints[:, 2], color="green")
-    #ax.set_xlabel('X-axis')
-    #ax.set_ylabel('Y-axis')
-    #ax.set_zlabel('Z-axis')
-    #plt.show()
 
     return alignedPoints, centroid
 
@@ -185,7 +163,7 @@ def getNeighbours(faces, numPoints):
 # Given
 # 3D Points of type NumFrames X NumPoints x 3
 # Calibrated laser object
-def controlPointBasedARAP(triangulatedPoints, images, camera, segmentator, zSubdivisions=5):
+def controlPointBasedARAP(triangulatedPoints, camera, segmentator, zSubdivisions=5):
     left_M5_list = []
     right_M5_list = []
     left_points_list = []
@@ -237,14 +215,14 @@ def controlPointBasedARAP(triangulatedPoints, images, camera, segmentator, zSubd
         z = (-planeNormal[0] * xx - planeNormal[1] * yy - (-centroid[0].dot(planeNormal))) * 1. / planeNormal[2]
 
         # Project Glottal Outline Points into Pointcloud
-        glottalOutline = segmentator.getGlottalOutline(images[i])
+        glottalOutline = segmentator.getGlottalOutline(i)
         glottalCameraRays = camera.getRayMat(glottalOutline)
         t = helper.rayPlaneIntersectionMat(centroid, np.expand_dims(planeNormal, 0), np.zeros(glottalCameraRays.shape), glottalCameraRays) 
         glottalOutlinePoints = t * glottalCameraRays
 
 
         # Project Glottal Midline Extrema into Pointcloud
-        upperMidLine, lowerMidLine = segmentator.getGlottalMidline(images[i], isSegmented=False)
+        upperMidLine, lowerMidLine = segmentator.getGlottalMidline(i)
         gml_ray1 = camera.getRay(upperMidLine)
         gml_ray2 = camera.getRay(lowerMidLine)
         _, t1 = helper.rayPlaneIntersection(centroid[0], planeNormal, np.zeros((3)), gml_ray1) 
@@ -350,39 +328,6 @@ def controlPointBasedARAP(triangulatedPoints, images, camera, segmentator, zSubd
         arap_c_left_list.append(list(left_anchors.items()))
         arap_c_right_list.append(list(right_anchors.items()))
 
-        # Use ARAP to deform Control Points, using best practices here.
-        #try:
-        #    left_deform = ARAP.ARAP(M5_Left.T, np.array(faces_left), left_anchors.keys(), anchor_weight=10000.0)
-        #    right_deform = ARAP.ARAP(M5_Right.T, np.array(faces_right), right_anchors.keys(), anchor_weight=10000.0)
-
-        #    deformed_left = left_deform(left_anchors, num_iters=2).T
-        #    deformed_right = right_deform(right_anchors, num_iters=2).T
-        #except:
-        #    continue
-        
-        #print("")
-        #BSplineVisualization.visualizeSingleFrame(deformed_left, deformed_right, zSubdivisions, leftPoints, rightPoints)
-
-        #deformed_left = FastARAP.deform_async([M5_Left], [faces_left], [list(left_anchors.items())], 10000.0, 1)
-        #deformed_right = FastARAP.deform_async([M5_Right], [faces_right], [list(right_anchors.items())], 10000.0, 1)
-        #BSplineVisualization.visualizeSingleFrame(np.array(deformed_left), np.array(deformed_right), zSubdivisions, leftPoints, rightPoints)
-        
-
-        #fig = plt.figure()
-        #ax = fig.add_subplot(1, 1, 1)
-        #ax.scatter(leftPoints[:, 0], leftPoints[:, 2], color="blue")
-        #ax.scatter(rightPoints[:, 0], rightPoints[:, 2], color="black")
-        #ax.scatter(glottalOutlinePoints[np.where(glottalOutlinePoints[:, 0] < 0)][:, 0], glottalOutlinePoints[np.where(glottalOutlinePoints[:, 0] < 0)][:, 2], color="green")
-        #ax.scatter(glottalOutlinePoints[np.where(glottalOutlinePoints[:, 0] >= 0)][:, 0], glottalOutlinePoints[np.where(glottalOutlinePoints[:, 0] >= 0)][:, 2], color="red")
-        #ax.plot([pointOnPlane1[0], pointOnPlane2[0]], [pointOnPlane1[2], pointOnPlane2[2]], color="gray")
-        #plt.show()
-
-
-        # Save deformed Control Points in List
-        #left_M5_list.append(deformed_left)
-        #right_M5_list.append(deformed_right)
-        #left_points_list.append(np.concatenate([leftPoints, glottalOutlinePoints[np.where(glottalOutlinePoints[:, 0] < 0)]], axis=0))
-        #right_points_list.append(np.concatenate([rightPoints, glottalOutlinePoints[np.where(glottalOutlinePoints[:, 0] >= 0)]], axis=0))
         left_points_list.append(leftPoints)
         right_points_list.append(rightPoints)
         combined_points.append(np.concatenate([leftPoints, rightPoints]))
@@ -391,6 +336,7 @@ def controlPointBasedARAP(triangulatedPoints, images, camera, segmentator, zSubd
     copied_M5_right = np.expand_dims(np.array(M5_Right), 0).repeat(len(arap_c_left_list), axis=0)
     copied_faces_left = np.expand_dims(np.array(faces_left), 0).repeat(len(arap_c_left_list), axis=0)
     copied_faces_right = np.expand_dims(np.array(faces_right), 0).repeat(len(arap_c_left_list), axis=0)
+
     copied_neighbours_left = [neighbours_left for i in range(len(arap_c_left_list))]
     copied_neighbours_right = [neighbours_right for i in range(len(arap_c_left_list))]
 
@@ -517,219 +463,3 @@ def getPrincipalComponentAxes(points, normalized=True):
         return pc[0] / np.linalg.norm(pc[0]), pc[1] / np.linalg.norm(pc[1])
 
     return pc[0], pc[1]
-
-
-
-
-
-def cmap(t):
-    c0 = np.array([0.0002189403691192265, 0.001651004631001012, -0.01948089843709184])
-    c1 = np.array([0.1065134194856116, 0.5639564367884091, 3.932712388889277])
-    c2 = np.array([11.60249308247187, -3.972853965665698, -15.9423941062914])
-    c3 = np.array([-41.70399613139459, 17.43639888205313, 44.35414519872813])
-    c4 = np.array([77.162935699427, -33.40235894210092, -81.80730925738993])
-    c5 = np.array([-71.31942824499214, 32.62606426397723, 73.20951985803202])
-    c6 = np.array([25.13112622477341, -12.24266895238567, -23.07032500287172])
-
-    return c0+t*(c1+t*(c2+t*(c3+t*(c4+t*(c5+t*c6)))))
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Surface Reconstruction of Vocal Folds using sparse point samples.")
-    parser.add_argument('--calibration_file', '-c', type=str, required=True, help="Path to a calibration .MAT or .JSON File")
-    parser.add_argument('--input', '-i', type=str, required=True, help="Path to a file containing the 3d points")
-    parser.add_argument('--zcntrl' '-z', type=int, default=8, help="Specify the number of control points in Z Direction")
-    parser.add_argument('--learning_rate' '-lr', type=float, default=0.1, help="Specify the learning rate for ADAM-Optimizer")
-    parser.add_argument('--iterations' '-it', type=int, default=100, help="Define the number of Iterations for Least Squares Optimization")
-
-    args = parser.parse_args()
-
-    point_path = args.input
-    calib_path = args.calibration_file
-    zSubdivs = args.zcntrl_z
-    learning_rate = args.learning_rate_lr
-    iterations = args.iterations_it
-
-    print("3D Point Path: {0}".format(point_path))
-    print("Calibration File {0}".format(calib_path))
-    print("Number of Subdivisions: {0}".format(zSubdivs))
-    print("Learning Rate: {0}".format(learning_rate))
-    print("Number of Iterations: {0}".format(iterations))
-
-    camera = Camera.Camera(calib_path)
-    laser = Laser(calib_path, "MAT")
-
-    path_start = "/media/nu94waro/Seagate Expansion Drive/Promotion/Data/Rekonstruktion_Silikon/"
-    names = [("50_Kay", "Kay_50_-15_M2"), 
-            ("50_Kay", "Kay_50_-10_M2"),
-            ("50_Kay", "Kay_50_-5_M2"),
-            ("50_Kay", "Kay_50_0_M2"),
-            ("50_Kay", "Kay_50_5_M2"),
-            ("50_Kay", "Kay_50_10_M2"),
-            ("50_Kay", "Kay_50_15_M2"),
-            ("65_Kay", "Kay_65_M2_-15"),
-            ("65_Kay", "Kay_65_M2_-10"),
-            ("65_Kay", "Kay_65_M2_-5"),
-            ("65_Kay", "Kay_65_M2_0"),
-            ("65_Kay", "Kay_65_M2_5"),
-            ("65_Kay", "Kay_65_M2_10"),
-            ("65_Kay", "Kay_65_M2_15"),
-            ("80_Kay", "80_Kay_-15_M2_gecklickt"),
-            ("80_Kay", "80_Kay_-10_M2_gecklickt"),
-            ("80_Kay", "80_kay_-05_M2_gecklickt"),
-            ("80_Kay", "80_Kay_0_M2_gecklickt"),
-            ("80_Kay", "80_kay_05_M2_gecklickt"),
-            ("80_Kay", "80_Kay_10_M2_gecklickt"),
-            ("80_Kay", "80_Kay_15_M2_gecklickt")]
-    path_middle = "png/"
-
-
-    framesOfClosedGlottis = [38, 3, 29, 27, 9, 13, 18,
-                             21, 28, 26, 4, 13, 32, 30,
-                             44, 10, 20, 29, 19, 3, 19]
-
-    paths = list()
-    mat_paths = list()
-    for folder, name in names:
-
-        #if folder != "65_Kay":
-        #    continue
-
-        image_path = path_start + folder + "/" + name + "/" + path_middle
-        mat_path = path_start + folder + "/" + name + "/results/reconstruction/" + name + "_rec.npy"
-        paths.append(image_path)
-        mat_paths.append(mat_path)
-
-
-    for mat_path in mat_paths:
-        test = np.load(mat_path)
-        a = 1
-
-    #image_list = list()
-    #print("Loading images")
-    #for path in paths:
-    #    images = helper.loadImages(path, camera.intrinsic(), camera.distortionCoefficients())
-    #    image_list.append(images)
-
-
-    #visualization.plotPoints3D()
-
-    #midlines = list()
-    #for focg, images, name  in zip(framesOfClosedGlottis, image_list, names):
-    #    segmentator = SegmentationClicker.SegmentationClicker(images[focg+10])
-    #    segmentator.clickMidline()
-    #    midlines.append(segmentator.getMidline())
-
-
-    
-    rois = np.load("assets/rois.npy").tolist()
-    midlines = np.load("assets/midlines.npy").tolist()
-        #segmentator.clickMidline()
-    
-    for focg, mat_path, path, name, roi, midline  in zip(framesOfClosedGlottis, mat_paths, paths, names, rois, midlines):
-        
-        if name[0] != "65_Kay":
-            continue
-
-        print("Reconstructing: {0}".format(name[1]))
-
-        images = helper.loadImages(path, camera.intrinsic(), camera.distortionCoefficients())
-
-        #width = images[0].shape[1]
-        #height = images[0].shape[0]
-
-
-        #frameOfClosedGlottis = focg
-
-        #x, w, y, h = roi
-
-
-        # Use ROI to generate mask image
-        #segmentation = np.zeros((height, width), dtype=np.uint8)
-        #segmentation[y:y+h, x:x+w] = 255
-
-        #vocalfold_image = images[frameOfClosedGlottis]
-
-        #maxima = helper.findMaxima(vocalfold_image, segmentation)
-
-        #cv2.imshow("Maxima", maxima)
-        #cv2.waitKey(0)
-
-        #for image in images:
-        #    lol = np.where(image == 0, 255, 0)
-        #    cv2.imshow("LOL", lol.astype(np.uint8))
-        #    cv2.waitKey(0)
-
-
-        # Changing from N x (Y,X) to N x (X,Y)
-        #vectorized_maxima = np.flip(np.stack(maxima.nonzero(), axis=1), axis=1)
-
-        #cf = VoronoiRHC.CorrespondenceFinder(camera, laser, minWorkingDistance=40.0, maxWorkingDistance=100.0, threshold=3.0, debug=maxima)
-        #correspondences = []
-        #while len(correspondences) == 0:
-        #    correspondences = cf.establishCorrespondences(vectorized_maxima)
-
-        #grid2DPixLocations = [[laser.getXYfromN(id), np.flip(pix)] for id, pix in correspondences]
-
-        #temporalCorrespondence = Correspondences.generateFramewise(images, frameOfClosedGlottis, grid2DPixLocations, segmentation)
-        #triangulatedPoints = np.array(Triangulation.triangulationMat(camera, laser, temporalCorrespondence, 40.0, 80.0, 40.0, 90.0))[:50, :, :]
-
-        triangulatedPoints = np.load(mat_path)
-        triangulatedPoints = triangulatedPoints.reshape(triangulatedPoints.shape[2], triangulatedPoints.shape[1], triangulatedPoints.shape[0]).T
-        triangulatedPoints = triangulatedPoints[30:60, :, :]
-        images = images[30:60]
-
-        triangulatedPoints = triangulatedPoints.tolist()
-        newpoints = list()
-
-        segmentations = list()
-
-        laserdots = list()
-
-        for points, image in zip(triangulatedPoints, images):
-            points = np.array(points)
-            points2d = camera.project(points)
-            segmentation = np.where(image == 0, 255, 0).astype(np.uint8)
-            points = points[~np.isnan(points2d).any(axis=1)]
-            points2d = points2d[~np.isnan(points2d).any(axis=1)]
-            seghits = segmentation[points2d.astype(np.int)[:, 1], points2d.astype(np.int)[:, 0]] > 0
-            points = points[~seghits]
-            points2d = points2d[~seghits]
-            newpoints.append(points)
-            segmentations.append(segmentation)
-
-            roi_image = np.zeros((256, 512), dtype=np.uint8)
-            x, w, y, h = roi
-            roi_image[y:y+h, x:x+w] = 255
-            laserpoints = image * roi_image
-            maxima = helper.findMaxima(image, roi_image)
-            maxima = cv2.dilate(maxima, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)))
-            maxima = np.where(maxima == 0, 0, 255).astype(np.uint8)
-            maxima = np.concatenate( [np.expand_dims(np.zeros(maxima.shape, dtype=np.uint8), -1), np.expand_dims(maxima, -1), np.expand_dims(np.zeros(maxima.shape, dtype=np.uint8), -1)], axis=-1, dtype=np.uint8)
-            laserdots.append(np.expand_dims(image, -1) | maxima)
-
-
-        # If everything is working as intended
-        # left and rightDeformed are of size N x P x 3,
-        # where N is the number of Frames, P is the number of Vertices of the M5 Models
-        # and 3 is the dimension of the data
-        print("ARAPing")
-        leftDeformed, rightDeformed, leftPoints, rightPoints = controlPointBasedARAP(newpoints, images, zSubdivisions=zSubdivs, glottalmidline=midline)
-        #BSplineVisualization.visualizeBM5(np.array(leftDeformed), np.array(rightDeformed), zSubdivs, leftPoints, rightPoints, filename=name[1], plot=True)
-
-        optimizedLeft = surfaceOptimization(leftDeformed, leftPoints, zSubdivisions=zSubdivs, iterations=10, lr=0.1)
-        optimizedLeft = np.array(optimizedLeft)
-        smoothedLeft = scipy.ndimage.uniform_filter(optimizedLeft, size=(5, 1, 1), mode='reflect', cval=0.0, origin=0)
-
-
-        optimizedRight = surfaceOptimization(rightDeformed, rightPoints, zSubdivisions=zSubdivs, iterations=10, lr=0.1)
-        optimizedRight = np.array(optimizedRight)
-        smoothedRight = scipy.ndimage.uniform_filter(optimizedRight, size=(5, 1, 1), mode='reflect', cval=0.0, origin=0)
-
-
-        viewer_app = QApplication(["Vocal3D - Vocal Fold 3D Reconstruction"])
-        viewer = Viewer.Viewer(smoothedLeft.shape[0], smoothedLeft.max(axis=1)[:, 1], smoothedRight.max(axis=1)[:, 1], smoothedLeft, smoothedRight, images, segmentations, laserdots, zSubdivs)
-        viewer.show()
-
-        # Launch the Qt application
-        viewer_app.exec()

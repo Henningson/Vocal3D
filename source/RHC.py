@@ -35,8 +35,8 @@ def globalAlignment(laserGridStuff, pixelLocations, maxima, laser):
     return grid2DPixLocations
 
 
-def RHC(laserGridStuff, pixelLocations, maxima, camera, laser, set_size, iterations):
-    grid2DPixLocations = globalAlignment(laserGridStuff, pixelLocations, maxima, laser)   
+def RHC(laserGridStuff, pixelLocations, segmentator, camera, laser, set_size, iterations):
+    grid2DPixLocations = globalAlignment(laserGridStuff, pixelLocations, segmentator.getLocalMaxima(segmentator.getClosedGlottisIndex()), laser)   
 
     N = laser.gridHeight() // 2
     distMin, _ = helper.getPointOnRayFromOrigin(laser.origin(), laser.ray(N)/np.linalg.norm(laser.ray(N)), 40.0)

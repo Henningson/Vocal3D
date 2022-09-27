@@ -5,20 +5,17 @@ from sklearn.neighbors import NearestNeighbors
 import helper
 
 
-def initialize(laser, camera, maxima, image, minInterval, maxInterval):
-    maxima = maxima.copy()
-    points = maxima.nonzero()
-    maximaTransformed = np.concatenate([[points[0]], [points[1]]]).T
+def initialize(laser, camera, segmentator, minInterval, maxInterval):
+    maxima = segmentator.getLocalMaxima(segmentator.getClosedGlottisIndex()).copy()
     
     locations = list()
     ids = list()
 
-    count = 0
     for x in range(0, laser.gridWidth(), 1):
         for y in range(laser.gridHeight() - 1, -1, -1):
             laserRay = laser.ray(y, x)
 
-            mask = helper.generateMask(np.zeros((image.shape[0], image.shape[1]), np.uint8), camera.intrinsic(), laser.origin(), laserRay, minInterval, maxInterval,  2, 2)
+            mask = helper.generateMask(np.zeros((segmentator.getImage(0).shape[0], segmentator.getImage(0).shape[1]), np.uint8), camera.intrinsic(), laser.origin(), laserRay, minInterval, maxInterval,  2, 2)
             masked_maxima = maxima * mask
             masked_points = masked_maxima.nonzero()
 
@@ -38,15 +35,14 @@ def initialize(laser, camera, maxima, image, minInterval, maxInterval):
     return locations, ids
 
 
-def generateFramewise(images, closedGlottisFrame, correspondenceEstimate, segmentation, distance_threshold = 5.0):
+def generateFramewise(segmentator, correspondenceEstimate, distance_threshold = 5.0):
     neighbours = NearestNeighbors(n_neighbors=1, algorithm='ball_tree').fit(np.array(correspondenceEstimate)[:, 1])
     xy = np.array([[[-1.0, -1.0], [-1.0, 0.0], [-1.0, 1.0]], [[0.0, -1.0], [0.0, 0.0], [0.0, 1.0]], [[1.0, -1.0], [1.0, 0.0], [1.0, 1.0]]])
     
-    for i in range(0, len(images)):
-        image = images[i]
+    for i in range(len(segmentator)):
+        image = segmentator.getImage(i).copy()
 
-        maxima = helper.findLocalMaxima(image, 7)
-        maxima = (segmentation & image) * maxima
+        maxima = segmentator.getLocalMaxima(i).copy()
         maxima_vec = maxima.nonzero()
         maxima_vec = np.concatenate([[maxima_vec[0]], [maxima_vec[1]]]).T
 

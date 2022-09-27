@@ -232,9 +232,9 @@ def controlPointBasedARAP(triangulatedPoints, laser, images, camera, segmentator
         frameCount += 1
 
         #Basic Outlier-Filtering
-        tree = KDTree(points)
-        outlierIndices = np.where(np.sum(tree.query(points, k=4)[0][:, 1:], axis=1) / 3 < 1.5)
-        points = points[outlierIndices]
+        #tree = KDTree(points)
+        #outlierIndices = np.where(np.sum(tree.query(points, k=4)[0][:, 1:], axis=1) / 3 < 1.5)
+        #points = points[outlierIndices]
 
         centroid = np.expand_dims(np.sum(points, axis=0) / points.shape[0], 0)
         alignedPoints = points - centroid

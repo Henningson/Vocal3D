@@ -17,12 +17,16 @@ from MainMenuWidget import MainMenuWidget
 from VideoPlayerWidget import VideoPlayerWidget
 from QLines import QHLine, QVLine
 
-from VocalfoldHSVSegmentation import vocalfold_segmentation
+import cProfile
+
+import KocSegmentation
+import SiliconeSegmentation
+import NeuralSegmentation
+
 import Mesh
 import Camera
 import Laser
 import helper
-import SiliconeSegmentator
 import RHC
 import VoronoiRHC
 import Correspondences
@@ -309,40 +313,25 @@ class Viewer(QWidget):
 
     def segmentImages(self):
         if self.menu_widget.getSubmenuValue("Segmentation", "Koc et al"):
-            self.segmentator = vocalfold_segmentation.HSVGlottisSegmentator(self.images[:50])
+            self.segmentator = KocSegmentation.KocSegmentator(self.images)
         elif self.menu_widget.getSubmenuValue("Segmentation", "Neural Segmentation"):
-            self.segmentator = None
-            # TODO: Implement
+            self.segmentator = NeuralSegmentation.NeuralSegmentator(self.images)
         elif self.menu_widget.getSubmenuValue("Segmentation", "Silicone Segmentation"):
-                self.segmentator = SiliconeSegmentator.SiliconeVocalfoldSegmentator(self.images[:50])
+                self.segmentator = SiliconeSegmentation.SiliconeSegmentator(self.images)
         else:
             print("Please choose a Segmentation Algorithm")
-        
-        self.segmentator.generate()
 
         x, w, y, h = self.segmentator.getROI()
-
-        # Use ROI to generate mask image
-        self.roi = np.zeros((self.images[0].shape[0], self.images[0].shape[1]), dtype=np.uint8)
-        self.roi[y:y+h, x:x+w] = 255
-
-        self.frameOfClosedGlottis = self.segmentator.estimateClosedGlottis()
-        vocalfold_image = self.images[self.frameOfClosedGlottis]
-
-        self.maxima = helper.findMaxima(vocalfold_image, self.roi)
+        self.roi = self.segmentator.getROIImage()
 
         segmentations = list()
         laserdots = list()
 
-        for image in self.images:
-            base_image = image
+        for index in range(len(self.segmentator)):
+            base_image = self.segmentator.getImage(index).copy()
 
-            segmentation_image = base_image.copy()
-            segmentation_image = self.segmentator.segment_image(segmentation_image)
-            gml_a, gml_b = self.segmentator.getGlottalMidline(segmentation_image)
-
-            if self.menu_widget.getSubmenuValue("Segmentation", "Koc et al"):
-                segmentation_image = self.segmentator.gen_segmentation_image(segmentation_image)
+            segmentation_image = self.segmentator.getSegmentation(index).copy()
+            gml_a, gml_b = self.segmentator.getGlottalMidline(index)
 
             segmentation_image = cv2.cvtColor(segmentation_image, cv2.COLOR_GRAY2BGR)
 
@@ -351,14 +340,14 @@ class Viewer(QWidget):
                 cv2.line(segmentation_image, gml_a.astype(np.int32), gml_b.astype(np.int32), color=(125, 125, 0), thickness=2)
             except:
                 pass
-            segmentations.append(cv2.cvtColor(image, cv2.COLOR_GRAY2BGR) | segmentation_image)
+            segmentations.append(cv2.cvtColor(base_image, cv2.COLOR_GRAY2BGR) | segmentation_image)
 
-            laserdot_image = helper.findMaxima(image, self.roi)
+            laserdot_image = self.segmentator.getLocalMaxima(index).copy()
             laserdot_image = cv2.dilate(laserdot_image, np.ones((3,3)))
             laserdot_image = np.where(laserdot_image > 0, 255, 0).astype(np.uint8)
             laserdot_image = cv2.cvtColor(laserdot_image, cv2.COLOR_GRAY2BGR)
             laserdot_image[:, :, [0, 2]] = 0
-            laserdots.append(cv2.cvtColor(image, cv2.COLOR_GRAY2BGR) | laserdot_image)
+            laserdots.append(cv2.cvtColor(base_image, cv2.COLOR_GRAY2BGR) | laserdot_image)
         
         self.segmentations = segmentations
         self.laserdots = laserdots
@@ -370,10 +359,11 @@ class Viewer(QWidget):
         set_size = int(self.menu_widget.getSubmenuValue("RHC", "Consensus Size"))
         iterations = int(self.menu_widget.getSubmenuValue("RHC", "Iterations"))
 
+
         if self.menu_widget.getSubmenuValue("RHC", "Activated"):
-            pixelLocations, laserGridIDs = Correspondences.initialize(self.laser, self.camera, self.maxima, self.images[self.frameOfClosedGlottis], min_search_space, max_search_space)
-            self.grid2DPixLocations = RHC.RHC(laserGridIDs, pixelLocations, self.maxima, self.camera, self.laser, set_size, iterations)
-        elif self.menu_widget.getSUbmenuValue("Voronoi RHC", "Activated"):
+            pixelLocations, laserGridIDs = Correspondences.initialize(self.laser, self.camera, self.segmentator, min_search_space, max_search_space)
+            self.grid2DPixLocations = RHC.RHC(laserGridIDs, pixelLocations, self.segmentator, self.camera, self.laser, set_size, iterations)
+        elif self.menu_widget.getSubmenuValue("Voronoi RHC", "Activated"):
             cf = VoronoiRHC.CorrespondenceFinder(self.camera, self.laser, minWorkingDistance=min_search_space, maxWorkingDistance=max_search_space, threshold=thresh)
             correspondences = []
             vectorized_maxima = np.flip(np.stack(self.maxima.nonzero(), axis=1), axis=1)
@@ -383,11 +373,11 @@ class Viewer(QWidget):
             self.grid2DPixLocations = [[self.laser.getXYfromN(id), np.flip(pix)] for id, pix in correspondences]
 
         pixel_coords = np.array(self.grid2DPixLocations)[:, 1, :].astype(np.int32)
-        debug_img = np.zeros(self.images[0].shape, np.uint8)
+        debug_img = np.zeros(self.segmentator.getImage(0).shape, np.uint8)
         debug_img[pixel_coords[:, 0], pixel_coords[:, 1]] = 255
         debug_img = cv2.dilate(debug_img, np.ones((3,3)))
 
-        base_img = self.images[self.frameOfClosedGlottis]
+        base_img = self.images[self.segmentator.getClosedGlottisIndex()].copy()
         base_img = cv2.cvtColor(base_img, cv2.COLOR_GRAY2BGR)
         base_img = base_img | cv2.cvtColor(debug_img, cv2.COLOR_GRAY2BGR)
         
@@ -397,7 +387,7 @@ class Viewer(QWidget):
         min_search_space = float(self.menu_widget.getSubmenuValue("RHC", "Minimum Distance"))
         max_search_space = float(self.menu_widget.getSubmenuValue("RHC", "Maximum Distance"))
 
-        temporalCorrespondence = Correspondences.generateFramewise(self.images, self.frameOfClosedGlottis, self.grid2DPixLocations, self.roi)
+        temporalCorrespondence = Correspondences.generateFramewise(self.segmentator, self.grid2DPixLocations)
         self.triangulatedPoints = np.array(Triangulation.triangulationMat(self.camera, self.laser, temporalCorrespondence, min_search_space, max_search_space, min_search_space, max_search_space))
 
         
@@ -407,8 +397,8 @@ class Viewer(QWidget):
 
         if self.point_cloud_id is not None:
             self.viewer_widget.remove_mesh(self.point_cloud_id)
-
-        self.leftDeformed, self.rightDeformed, self.leftPoints, self.rightPoints, self.pointclouds = SiliconeSurfaceReconstruction.controlPointBasedARAP(self.triangulatedPoints, self.images, self.camera, self.segmentator, zSubdivisions=zSubdivisions)
+    
+        self.leftDeformed, self.rightDeformed, self.leftPoints, self.rightPoints, self.pointclouds = SiliconeSurfaceReconstruction.controlPointBasedARAP(self.triangulatedPoints, self.camera, self.segmentator, zSubdivisions=zSubdivisions)
 
         self.point_cloud_offsets = [0]
         self.point_cloud_elements = [self.pointclouds[0].shape[0]]
