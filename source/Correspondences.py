@@ -48,6 +48,10 @@ def generateFramewise(segmentator, correspondenceEstimate, distance_threshold = 
 
         y = (maxima_vec[:, :1] + np.arange(-1, 2))[:, :, None]
         x = (maxima_vec[:, 1:] + np.arange(-1, 2))[:, None, :]
+        
+        #Spaghetti Code for when local maxima are next to an image border.
+        x = x - np.expand_dims(np.where(x - (image.shape[1]-1) < 0, 0, x - (image.shape[1]-1)).sum(axis=2), -1)
+        y = y - np.expand_dims(np.where(y - (image.shape[0]-1) < 0, 0, y - (image.shape[0]-1)).sum(axis=2), -1)
 
         batched_weights = image[y, x] 
 

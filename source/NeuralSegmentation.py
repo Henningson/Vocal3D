@@ -70,7 +70,7 @@ class UNET(nn.Module):
 
 
 class NeuralSegmentator(BaseSegmentator):
-    def __init__(self, images, path="assets/checkpoint.pth.tar"):
+    def __init__(self, images, path="assets/model.pth.tar"):
         super().__init__(images)
 
         self.model = UNET(in_channels=1, out_channels=3).to(DEVICE)
@@ -78,18 +78,53 @@ class NeuralSegmentator(BaseSegmentator):
 
         self.laserdotSegmentations = list()
 
-        
+        self.generateSegmentationData()
+
+
+    def class_to_color(self, prediction, class_colors):
+        prediction = np.expand_dims(prediction, 1)
+        output = np.zeros((prediction.shape[0], 3, prediction.shape[-2], prediction.shape[-1]), dtype=np.uint8)
+        for class_idx, color in enumerate(class_colors):
+            mask = class_idx == prediction.max(axis=1)[0]
+            mask = np.expand_dims(np.expand_dims(mask, 0), 0) # should have shape 1, 1, 100, 100
+            curr_color = color.reshape(1, 3, 1, 1)
+            segment = mask*curr_color # should have shape 1, 3, 100, 100
+            output += segment.astype(np.uint8)
+
+        return output
+
     def segmentImage(self, frame):
-        segmentation = self.model(frame).argmax(dim=1).detach().cpu().numpy()
-        self.laserdotSegmentations.append(np.where(segmentation==1, 255, 0))
-        return np.where(segmentation==2, 255, 0)
+        segmentation = self.model(torch.from_numpy(frame).unsqueeze(0).unsqueeze(0).to(DEVICE).float()).argmax(dim=1).detach().cpu().numpy().squeeze().astype(np.uint8)
+
+        # Find biggest connected component
+        _, _, stats, centroids = cv2.connectedComponentsWithStats(segmentation, 4)
+        stats = np.array(stats)
+        area = stats[:, 4]
+        stats = stats[:, :4]
+        area = area.tolist()
+        stats = stats.tolist()
+        sorted_stats = sorted(zip(area, stats))
+
+        glottal_roi = np.zeros(segmentation.shape, np.uint8)
+        x, y, w, h = sorted_stats[-2][1]
+        glottal_roi[y:y+h, x:x+w] = 1
+        filtered_glottis = ((segmentation == 2) * 255 * glottal_roi).astype(np.uint8)
+
+        class_colors = [np.array([0, 0, 0]), np.array([0, 255, 0]), np.array([0, 0, 255])]
+        colored = np.moveaxis(self.class_to_color(np.expand_dims(segmentation, 0), class_colors)[0], 0, -1)
+
+        self.laserdotSegmentations.append(((segmentation == 1) * 255).astype(np.uint8))
+        return filtered_glottis
 
     def computeLocalMaxima(self, index, kernelsize=7):
         image = self.laserdotSegmentations[index]
-        kernel = np.ones((kernelsize, kernelsize), dtype=np.uint8)
-        kernel[math.floor(kernelsize//2), math.floor(kernelsize//2)] = 0.0
-        maxima = image > cv2.morphologyEx(image, cv2.MORPH_DILATE, kernel)
-        maxima = (self.getROIImage() & image) * maxima
+        img_erosion1 = cv2.erode(image, np.ones((3, 3), np.uint8), iterations=1)
+
+        _, _, _, centroids = cv2.connectedComponentsWithStats(img_erosion1, 4)
+        filtered_centroids = centroids[1:, :]
+        maxima = np.zeros(image.shape, np.uint8)
+        maxima[filtered_centroids[:, 1].astype(np.int), filtered_centroids[:, 0].astype(np.int)] = 255
+        
         return maxima
 
     def generateROI(self):
@@ -102,7 +137,7 @@ class NeuralSegmentator(BaseSegmentator):
             ys, xs = np.nonzero(laserdotSegmentation)
 
             maxY = np.max(ys)
-            minY = np.max(ys)
+            minY = np.min(ys)
             maxX = np.max(xs)
             minX = np.min(xs)
 
@@ -143,8 +178,11 @@ class NeuralSegmentator(BaseSegmentator):
             self.glottalOutlines.append(self.computeGlottalOutline(i))
             self.glottalMidlines.append(self.computeGlottalMidline(i))
         
-
         self.ROI = self.generateROI()
         self.ROIImage = self.generateROIImage()
+        
+        for i, image in enumerate(self.images):
+            self.localMaxima.append(self.computeLocalMaxima(i))
+        
         self.closedGlottisIndex = self.estimateClosedGlottis()
         self.openedGlottisIndex = self.estimateOpenGlottis()
