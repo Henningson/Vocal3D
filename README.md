@@ -83,3 +83,15 @@ However, you will still be able to generate results in a matter of seconds, prov
 Due to the moisture on top of human vocal folds, the mucuous tissue of in-vivo data often generates specular highlights that influences the performance of segmentation algorithms.
 Furthermore, the segmentation algorithm by Koc et al. that we supply in this repository requires well captured data, in which the glottis can be accurately differentiated from the vocal folds.
 As of right now, we are working on a system-specific segmentation algorithm that can deal with these harsh cases.
+
+## Citation
+If you find this work useful in your work, please cite us appropriately using:
+```
+@InProceedings{10.1007/978-3-031-16449-1_1,
+  author="Henningson, Jann-Ole and Stamminger, Marc and D{\"o}llinger, Michael and Semmler, Marion",
+  title="Real-Time 3D Reconstruction of Human Vocal Folds via High-Speed Laser-Endoscopy",
+  booktitle="Medical Image Computing and Computer Assisted Intervention -- MICCAI 2022",
+  year="2022",
+  pages="3--12",
+  isbn="978-3-031-16449-1"
+}
