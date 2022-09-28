@@ -85,7 +85,7 @@ Furthermore, the segmentation algorithm by Koc et al. that we supply in this rep
 As of right now, we are working on a system-specific segmentation algorithm that can deal with these harsh cases.
 
 ## Citation
-If you find this work useful in your work, please cite us appropriately using:
+Please cite this paper, if this work helps you with your research:
 ```
 @InProceedings{10.1007/978-3-031-16449-1_1,
   author="Henningson, Jann-Ole and Stamminger, Marc and D{\"o}llinger, Michael and Semmler, Marion",
@@ -95,3 +95,6 @@ If you find this work useful in your work, please cite us appropriately using:
   pages="3--12",
   isbn="978-3-031-16449-1"
 }
+```
+A PDF of the Paper is included in the `assets/` Folder of this repository.
+However, you can also find it here: <a href="https://link.springer.com/chapter/10.1007/978-3-031-16449-1_1">Springer Link</a>.
