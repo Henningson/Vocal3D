@@ -77,7 +77,16 @@ python source/main.py
 
 ## Things to note
 If you are using the supplied viewer, please note that the pipeline will generally be not as performant, as every step of the pipeline will be computed in succession (think of it more like a debug view).
-However, you will still be able to generate results in a matter of seconds, provided you do not use a PC that is barely able to run MS-DOS. :grin:
+However, you will still be able to generate results in a matter of seconds, provided you do not use a PC that is barely able to run MS-DOS.
+We supply three Segmentation algorithms in this repository.
+One is especially designed for the silicone videos (that are included in the sample_data.zip file), then we include the one by Koc et al. and finally a Neural Segmentator based on a U-Net architecture.
+For first tests, we recommend the U-Net one, as it generally is the most robust (albeit the slowest) one.
+A pre-trained model is included in the `assets` folder.
+
+## Implementing your own segmentation algorithm
+If you want to integrate your own segmentation algorithm into the viewer, we supply a `BaseSegmentator` class, from which your segmentation class may inherit.
+The necessary functions to override are marked by `#TODO: Implement me`.
+Please have a look at the supplied segmentation algorithms for some inspiration.
 
 ## Limitations
 Due to the moisture on top of human vocal folds, the mucuous tissue of in-vivo data often generates specular highlights that influences the performance of segmentation algorithms.
