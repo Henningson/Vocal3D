@@ -39,11 +39,22 @@ def compute_faces(control_points, inverted=True):
     U = control_points.shape[2]
     V = control_points.shape[1]
 
+    # Regular triangulation
     for u in range(V - 1):
         for v in range(U - 1):
             faces.append(np.array([u*U + v, (u+1)*U + v + 1, (u + 1)*U + v], dtype=np.int))
             faces.append(np.array([u*U + v, (u)*U + v + 1, (u + 1)*U + v + 1], dtype=np.int))
-            
+    
+    # Connect first to last row
+    for v in range(V - 1):
+        print(U*v, U*(v+1), U*v + U-1)
+        faces.append(np.array([U*v, U*(v+1), U*v + U-1], dtype=np.int))
+        faces.append(np.array([U*(v+1), U*(v+1) + U-1, U*v + U-1], dtype=np.int))
+
+    # Add caps
+    for u in range(U-2):
+        faces.append(np.array([0, u, u+1], dtype=np.int))
+        faces.append(np.array([(V-1)*U, (V-1)*U + u + 1, (V-1)*U + u], dtype=np.int))
 
     return np.array(faces)
 
