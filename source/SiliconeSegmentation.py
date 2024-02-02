@@ -54,11 +54,11 @@ class SiliconeSegmentator(BaseSegmentator):
         return [roiX, roiWidth, roiY, roiHeight]
 
     def estimateClosedGlottis(self):
-        num_pixels = 100000000
+        num_pixels = len((self.segmentations[0] == 255).nonzero()[0])
         glottis_closed_at_frame = 0
 
-        for count, segmentation in enumerate(self.images):
-            num_glottis_pixels = len(segmentation.nonzero()[0])
+        for count, segmentation in enumerate(self.segmentations):
+            num_glottis_pixels = len((segmentation == 255).nonzero()[0])
 
             if num_pixels > num_glottis_pixels:
                 num_pixels = num_glottis_pixels
