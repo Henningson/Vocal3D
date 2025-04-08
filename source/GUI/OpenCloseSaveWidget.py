@@ -11,7 +11,7 @@ class OpenCloseSaveWidget(QWidget):
         self.addButton("Open", self.open)
         self.addButton("New Video", self.openVideo)
         self.addButton("Load", self.open)
-        self.addButton("Save", self.open)
+        self.addButton("Save", self.saveProject)
 
     def addButton(self, title, function):
         button = QPushButton(title)

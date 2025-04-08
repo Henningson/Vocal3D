@@ -1,7 +1,7 @@
-import numpy as np
-import cv2
 import math
 
+import cv2
+import numpy as np
 from Segmentator import BaseSegmentator
 
 
@@ -13,11 +13,12 @@ class SiliconeSegmentator(BaseSegmentator):
     def segmentImage(self, frame):
         return np.where(frame == 0, 255, 0).astype(np.uint8)
 
-
     def generateROI(self):
         seg_image = self.segmentations[self.openGlottisIndex]
-        
-        _, _, stats, centroids = cv2.connectedComponentsWithStats(seg_image, 4, cv2.CV_32S)
+
+        _, _, stats, centroids = cv2.connectedComponentsWithStats(
+            seg_image, 4, cv2.CV_32S
+        )
 
         stats = np.array(stats)
         area = stats[:, 4]
@@ -35,9 +36,9 @@ class SiliconeSegmentator(BaseSegmentator):
         roiWidth = sorted_stats[-2][1][2]
         roiHeight = sorted_stats[-2][1][3]
 
-        roiX = roiX+roiWidth//2 - roiHeight
-        roiWidth = 2*roiHeight
-        roiY = int(roiY - (roiHeight*0.2))
+        roiX = roiX + roiWidth // 2 - roiHeight
+        roiWidth = 2 * roiHeight
+        roiY = int(roiY - (roiHeight * 0.2))
         roiHeight = int(roiHeight + (roiHeight * 0.4))
 
         if roiY < 0:
@@ -46,9 +47,9 @@ class SiliconeSegmentator(BaseSegmentator):
         if roiX < 0:
             roiX = 0
 
-        if roiY+roiHeight >= self.images[0].shape[0]:
+        if roiY + roiHeight >= self.images[0].shape[0]:
             roiHeight = self.images[0].shape[0] - roiY - 2
-        if roiX+roiWidth >= self.images[0].shape[1]:
+        if roiX + roiWidth >= self.images[0].shape[1]:
             roiWidth = self.images[0].shape[1] - roiX - 2
 
         return [roiX, roiWidth, roiY, roiHeight]
@@ -63,26 +64,25 @@ class SiliconeSegmentator(BaseSegmentator):
             if num_pixels > num_glottis_pixels:
                 num_pixels = num_glottis_pixels
                 glottis_closed_at_frame = count
-        
+
         return glottis_closed_at_frame
 
     def estimateOpenGlottis(self):
         num_pixels = 0
-        
+
         for count, segmentation in enumerate(self.segmentations):
             num_glottis_pixels = len(segmentation.nonzero()[0])
 
             if num_pixels < num_glottis_pixels:
                 num_pixels = num_glottis_pixels
                 glottis_open_at_frame = count
-        
-        return glottis_open_at_frame
 
+        return glottis_open_at_frame
 
     def computeLocalMaxima(self, index, kernelsize=7):
         image = self.images[index]
         kernel = np.ones((kernelsize, kernelsize), dtype=np.uint8)
-        kernel[math.floor(kernelsize//2), math.floor(kernelsize//2)] = 0.0
+        kernel[math.floor(kernelsize // 2), math.floor(kernelsize // 2)] = 0.0
         maxima = image > cv2.morphologyEx(image, cv2.MORPH_DILATE, kernel)
         roiImage = self.getROIImage()
         maxima = (self.getROIImage() & image) * maxima

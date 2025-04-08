@@ -33,28 +33,41 @@ def generate_surface_points(control_points, zSubdivs):
     return layer(torch.cat((inp_ctrl_pts, weights), -1))
 
 
-def compute_faces(control_points, inverted=True):
+def compute_faces(U, V, inverted=False):
     faces = []
 
-    U = control_points.shape[2]
-    V = control_points.shape[1]
+    if not inverted:
+        # Regular triangulation
+        for u in range(V - 1):
+            for v in range(U - 1):
+                faces.append(np.array([u*U + v, (u + 1)*U + v, (u+1)*U + v + 1], dtype=np.int))
+                faces.append(np.array([u*U + v, (u + 1)*U + v + 1, (u)*U + v + 1], dtype=np.int))
+        
+        # Connect first to last row
+        for v in range(V - 1):
+            faces.append(np.array([U*v, U*v + U-1, U*(v+1)], dtype=np.int))
+            faces.append(np.array([U*(v+1), U*v + U-1, U*(v+1) + U-1], dtype=np.int))
 
-    # Regular triangulation
-    for u in range(V - 1):
-        for v in range(U - 1):
-            faces.append(np.array([u*U + v, (u+1)*U + v + 1, (u + 1)*U + v], dtype=np.int))
-            faces.append(np.array([u*U + v, (u)*U + v + 1, (u + 1)*U + v + 1], dtype=np.int))
-    
-    # Connect first to last row
-    for v in range(V - 1):
-        print(U*v, U*(v+1), U*v + U-1)
-        faces.append(np.array([U*v, U*(v+1), U*v + U-1], dtype=np.int))
-        faces.append(np.array([U*(v+1), U*(v+1) + U-1, U*v + U-1], dtype=np.int))
+        # Add caps
+        for u in range(U-2):
+            faces.append(np.array([0, u, u+1], dtype=np.int))
+            faces.append(np.array([(V-1)*U, (V-1)*U + u + 1, (V-1)*U + u], dtype=np.int))
+    else:
+        # Regular triangulation
+        for u in range(V - 1):
+            for v in range(U - 1):
+                faces.append(np.array([u*U + v, (u+1)*U + v + 1, (u + 1)*U + v], dtype=np.int))
+                faces.append(np.array([u*U + v, (u)*U + v + 1, (u + 1)*U + v + 1], dtype=np.int))
+        
+        # Connect first to last row
+        for v in range(V - 1):
+            faces.append(np.array([U*v, U*(v+1), U*v + U-1], dtype=np.int))
+            faces.append(np.array([U*(v+1), U*(v+1) + U-1, U*v + U-1], dtype=np.int))
 
-    # Add caps
-    for u in range(U-2):
-        faces.append(np.array([0, u, u+1], dtype=np.int))
-        faces.append(np.array([(V-1)*U, (V-1)*U + u + 1, (V-1)*U + u], dtype=np.int))
+        # Add caps
+        for u in range(U-2):
+            faces.append(np.array([0, u+1, u], dtype=np.int))
+            faces.append(np.array([(V-1)*U, (V-1)*U + u, (V-1)*U + u + 1], dtype=np.int))
 
     return np.array(faces)
 
@@ -63,6 +76,7 @@ def generate_BM5_mesh(control_points_left, control_points_right, zSubdivs):
     left_surface = generate_surface_points(control_points_left, zSubdivs).detach().cpu().numpy()
     right_surface = generate_surface_points(control_points_right, zSubdivs).detach().cpu().numpy()
 
-    faces = compute_faces(left_surface)
+    faces_left = compute_faces(left_surface.shape[2], left_surface.shape[1], inverted=False)
+    faces_right = compute_faces(right_surface.shape[2], right_surface.shape[1], inverted=True)
 
-    return left_surface, right_surface, faces
+    return left_surface, right_surface, faces_left, faces_right

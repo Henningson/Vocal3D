@@ -1,10 +1,11 @@
+import math
+
+import cv2
+import numpy as np
 import torch
 import torch.nn as nn
 import torchvision.transforms.functional as TF
 from Segmentator import BaseSegmentator
-import numpy as np
-import cv2
-import math
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -149,7 +150,7 @@ class NeuralSegmentator(BaseSegmentator):
         num_pixels = 100000000
         glottis_closed_at_frame = 0
 
-        for count, segmentation in enumerate(self.segmentations):
+        for count, segmentation in enumerate(self._segmentations):
             num_glottis_pixels = len(segmentation.nonzero()[0])
 
             if num_pixels > num_glottis_pixels:
@@ -162,7 +163,7 @@ class NeuralSegmentator(BaseSegmentator):
     def estimateOpenGlottis(self):
         num_pixels = 0
         
-        for count, segmentation in enumerate(self.segmentations):
+        for count, segmentation in enumerate(self._segmentations):
             num_glottis_pixels = len(segmentation.nonzero()[0])
 
             if num_pixels < num_glottis_pixels:
@@ -174,9 +175,9 @@ class NeuralSegmentator(BaseSegmentator):
     
     def generateSegmentationData(self):
         for i, image in enumerate(self.images):
-            self.segmentations.append(self.segmentImage(image))
-            self.glottalOutlines.append(self.computeGlottalOutline(i))
-            self.glottalMidlines.append(self.computeGlottalMidline(i))
+            self._segmentations.append(self.segmentImage(image))
+            self._glottal_outlines.append(self.computeGlottalOutline(i))
+            self._glottal_midlines.append(self.computeGlottalMidline(i))
         
         self.ROI = self.generateROI()
         self.ROIImage = self.generateROIImage()

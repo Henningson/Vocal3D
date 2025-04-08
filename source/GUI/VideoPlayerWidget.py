@@ -1,5 +1,7 @@
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QSlider, QPushButton
+from PyQt5.QtWidgets import (QHBoxLayout, QPushButton, QSlider, QVBoxLayout,
+                             QWidget)
+
 
 class VideoPlayerWidget(QWidget):
     def __init__(self, parent=None):
@@ -10,7 +12,7 @@ class VideoPlayerWidget(QWidget):
         self.slider.setMinimum(0)
         self.slider.setRange(0, 100)
         self.slider.setValue(0)
-        self.slider.setGeometry(0, 0, 1000, 1000)
+        #self.slider.setGeometry(0, 0, 1000, 1000)
         layout.addWidget(self.slider)
         self.setLayout(layout)
 

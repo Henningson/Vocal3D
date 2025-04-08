@@ -1,9 +1,8 @@
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel
-from PyQt5.QtGui import QImage, QPixmap
-
-from QLines import QVLine
 import cv2
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QImage, QPixmap
+from PyQt5.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from QLines import QVLine
 
 
 class ImageViewerWidget(QWidget):
@@ -31,7 +30,6 @@ class ImageViewerWidget(QWidget):
         title_widget.setFont(title_font)
 
         image_widg = QLabel(title)
-        image_widg.setFixedSize(size[0], size[1])
         self.imageDICT[title] = image_widg
 
         lay.addWidget(title_widget, alignment=Qt.AlignmentFlag.AlignCenter)
@@ -57,7 +55,7 @@ class ImageViewerWidget(QWidget):
         return QImage(image.data, w, h, bytesPerLine, QImage.Format_BGR888)
         
     def updateImage(self, image, widget):
-        widget.setPixmap(QPixmap.fromImage(self.convertImage(image)))
+        widget.setPixmap(QPixmap.fromImage(self.convertImage(image).scaledToWidth(128)))
 
     def getWidget(self, key):
         return self.imageDICT[key]
