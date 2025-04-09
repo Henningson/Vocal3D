@@ -158,7 +158,7 @@ class LSQLocalization:
         ).tolist()
 
         # Extract windows around the local maxima
-        intensities, y_windows, x_windows = cv.extractWindow(
+        intensities, y_windows, x_windows = cv.extract_windows_from_batch(
             image, maxima_indices, self.gauss_window_size, device=self.device
         )
 
@@ -214,7 +214,7 @@ class LSQLocalization:
         ).tolist()
 
         # Extract windows around the local maxima
-        intensities, y_windows, x_windows = cv.extractWindow(
+        intensities, y_windows, x_windows = cv.extract_windows_from_batch(
             heat[:, 0, :, :], maxima_indices, self.gauss_window_size, device=self.device
         )
 

@@ -70,6 +70,7 @@ class Viewer(QWidget):
         self.laser = None
 
         self.images = None
+        self.video = None
         self.segmentations = None
         self.laserdots = None
 
@@ -148,6 +149,8 @@ class Viewer(QWidget):
             self.automaticReconstruction
         )
         self.menu_widget.widget().button_dict["Save Models"].clicked.connect(self.saveModels)
+        self.menu_widget.widget().button_dict["Track Points"].clicked.connect(self.trackPoints)
+
 
         self.timer_thread = QThread(self)
         self.timer_thread.started.connect(self.gen_timer_thread)
@@ -161,17 +164,19 @@ class Viewer(QWidget):
         self.image_timer_thread.start()
 
         path = "/media/nu94waro/Windows_C/save/datasets/HLEDataset/dataset"
+        
+        '''
         self.loadData(
             "assets/camera_calibration.json",
             "assets/laser_calibration.json",
             "assets/example_vid.avi",
-        )
-        '''
+        )'''
+        
         self.loadData(
             os.path.join(path, "camera_calibration.json"),
             os.path.join(path, "laser_calibration.json"),
             os.path.join(path, "MK/MK.avi"),
-        )'''
+        )
 
         self._reconstruction_pipeline = reconstruction_pipeline.ReconstructionPipeline(
             self.camera, 
@@ -451,9 +456,7 @@ class Viewer(QWidget):
 
         self.images_set = True
 
-    
-
-
+        self.video = torch.from_numpy(np.stack(self.images)).to("cuda")
 
     def segmentImages(self):
         segmentator: feature_estimation.FeatureEstimator = None
@@ -466,8 +469,8 @@ class Viewer(QWidget):
 
         self._reconstruction_pipeline.set_feature_estimator(segmentator)
         
-        images = torch.from_numpy(np.stack(self.images)).to("cuda")
-        segmentator.compute_features(images)
+        
+        segmentator.compute_features(self.video)
 
         segmentations = list()
         feature_images = segmentator.create_feature_images()
@@ -481,6 +484,10 @@ class Viewer(QWidget):
 
         self.segmentations = segmentations
         self.laserdots = segmentations
+
+    def trackPoints(self):
+        laserpoint_images = self._reconstruction_pipeline.track_points(self.video)
+        self.laserdots = laserpoint_images
 
     def buildCorrespondences(self):
         min_search_space = float(

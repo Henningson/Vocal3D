@@ -3,6 +3,7 @@ import correspondence_estimation
 import feature_estimation
 import point_tracking
 import surface_reconstruction
+import torch
 import Triangulation
 
 
@@ -64,8 +65,14 @@ class ReconstructionPipeline:
         self._glottal_area_waveform = gaw
 
 
-    def track_points(self) -> None:
-        self._optimized_point_positions, self._start_point, self._end_point = self._point_tacker.track_points(self._feature_estimator)
+    def track_points(self, video: torch.tensor) -> torch.tensor:
+        self._optimized_point_positions = self._point_tracker.track_points(video, self._feature_estimator)
+        point_video = []
+        for frame, points in zip(video, self._optimized_point_positions):
+            image = self._point_tracker.draw_points_on_image(frame, points)
+            point_video.append(image.detach().cpu().numpy())
+        
+        return point_video
 
     def estimate_correspondences(self) -> None:
         _, maximum_closing_frame = self._glottal_area_waveform.max()

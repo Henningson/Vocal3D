@@ -58,6 +58,7 @@ class MainMenuWidget(QWidget):
 
         self.base_layout.addWidget(QHLine())
         self.addButton("Segment Images")
+        self.addButton("Track Points")
         self.addButton("Build Correspondences")
         self.addButton("Triangulate")
         self.addButton("Dense Shape Estimation")
