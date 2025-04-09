@@ -1,7 +1,6 @@
 
 import correspondence_estimation
 import feature_estimation
-import point_extraction
 import point_tracking
 import surface_reconstruction
 import Triangulation

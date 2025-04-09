@@ -207,6 +207,8 @@ class LSQLocalization:
 
         # Find local maxima and indices at which we need to split the data
         maxima_indices = local_maxima.nonzero()
+
+        return maxima_indices
         split_indices = get_split_indices(
             maxima_indices[:, 0], device=self.device
         ).tolist()

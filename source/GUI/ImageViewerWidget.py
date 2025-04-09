@@ -52,10 +52,10 @@ class ImageViewerWidget(QWidget):
 
         h, w, ch = image.shape
         bytesPerLine = ch * w
-        return QImage(image.data, w, h, bytesPerLine, QImage.Format_BGR888)
+        return QImage(image.copy().data, w, h, bytesPerLine, QImage.Format_BGR888)
         
     def updateImage(self, image, widget):
-        widget.setPixmap(QPixmap.fromImage(self.convertImage(image).scaledToWidth(128)))
+        widget.setPixmap(QPixmap.fromImage(self.convertImage(image)))
 
     def getWidget(self, key):
         return self.imageDICT[key]

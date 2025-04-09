@@ -13,6 +13,7 @@ import feature_estimation
 import helper
 import igl
 import KocSegmentation
+import kornia
 import Laser
 import Mesh
 import NeuralSegmentation
@@ -24,6 +25,7 @@ import scipy
 import SiliconeSegmentation
 import SiliconeSurfaceReconstruction
 import surface_reconstruction
+import torch
 import Triangulation
 import VoronoiRHC
 from GraphWidget import GraphWidget
@@ -158,11 +160,18 @@ class Viewer(QWidget):
         self.timer_thread.start()
         self.image_timer_thread.start()
 
+        path = "/media/nu94waro/Windows_C/save/datasets/HLEDataset/dataset"
         self.loadData(
             "assets/camera_calibration.json",
             "assets/laser_calibration.json",
             "assets/example_vid.avi",
         )
+        '''
+        self.loadData(
+            os.path.join(path, "camera_calibration.json"),
+            os.path.join(path, "laser_calibration.json"),
+            os.path.join(path, "MK/MK.avi"),
+        )'''
 
         self._reconstruction_pipeline = reconstruction_pipeline.ReconstructionPipeline(
             self.camera, 
@@ -442,70 +451,36 @@ class Viewer(QWidget):
 
         self.images_set = True
 
+    
+
+
+
     def segmentImages(self):
-        if self.menu_widget.widget().getSubmenuValue("Segmentation", "Koc et al"):
-            self.segmentator = KocSegmentation.KocSegmentator(self.images)
-        elif self.menu_widget.widget().getSubmenuValue("Segmentation", "Neural Segmentation"):
-            self.segmentator = NeuralSegmentation.NeuralSegmentator(self.images)
+        segmentator: feature_estimation.FeatureEstimator = None
+        if self.menu_widget.widget().getSubmenuValue("Segmentation", "Neural Segmentation"):
+            segmentator = feature_estimation.NeuralFeatureEstimator("bla")
         elif self.menu_widget.widget().getSubmenuValue("Segmentation", "Silicone Segmentation"):
-            self.segmentator = SiliconeSegmentation.SiliconeSegmentator(self.images)
+            segmentator = feature_estimation.SiliconeFeatureEstimator()
         else:
             print("Please choose a Segmentation Algorithm")
 
-        x, w, y, h = self.segmentator.getROI()
-        self.roi = self.segmentator.getROIImage()
+        self._reconstruction_pipeline.set_feature_estimator(segmentator)
+        
+        images = torch.from_numpy(np.stack(self.images)).to("cuda")
+        segmentator.compute_features(images)
 
         segmentations = list()
-        laserdots = list()
+        feature_images = segmentator.create_feature_images()
 
-        for index in range(len(self.segmentator)):
-            base_image = self.segmentator.getImage(index).copy()
+        for feature_image in feature_images:
+            segmentations.append(feature_image.permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8))
 
-            segmentation_image = self.segmentator.getSegmentation(index).copy()
-            gml_a, gml_b = self.segmentator.getGlottalMidline(index)
-
-            segmentation_image = cv2.cvtColor(segmentation_image, cv2.COLOR_GRAY2BGR)
-
-            cv2.rectangle(
-                segmentation_image,
-                (x, y),
-                (x + w, y + h),
-                color=(255, 0, 0),
-                thickness=2,
-            )
-            try:
-                cv2.line(
-                    segmentation_image,
-                    gml_a.astype(np.int32),
-                    gml_b.astype(np.int32),
-                    color=(125, 125, 0),
-                    thickness=2,
-                )
-            except:
-                pass
-            segmentations.append(
-                cv2.cvtColor(base_image, cv2.COLOR_GRAY2BGR) | segmentation_image
-            )
-
-            laserdot_image = self.segmentator.getLocalMaxima(index).copy()
-            laserdot_image = cv2.dilate(laserdot_image, np.ones((3, 3)))
-            laserdot_image = np.where(laserdot_image > 0, 255, 0).astype(np.uint8)
-            laserdot_image = cv2.cvtColor(laserdot_image, cv2.COLOR_GRAY2BGR)
-            laserdot_image[:, :, [0, 2]] = 0
-            laserdots.append(
-                cv2.cvtColor(base_image, cv2.COLOR_GRAY2BGR) | laserdot_image
-            )
-
-        glottal_area_waveform = [
-            len(self.segmentator.getSegmentation(index).nonzero()[0])
-            for index in range(len(self.segmentator))
-        ]
         self.graph_widget.updateGraph(
-            glottal_area_waveform, self.graph_widget.glottal_seg_graph
+            segmentator.glottalAreaWaveform().tolist(), self.graph_widget.glottal_seg_graph
         )
 
         self.segmentations = segmentations
-        self.laserdots = laserdots
+        self.laserdots = segmentations
 
     def buildCorrespondences(self):
         min_search_space = float(

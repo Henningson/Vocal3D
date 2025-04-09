@@ -28,8 +28,8 @@ class MainMenuWidget(QWidget):
             "Segmentation",
             [
                 ("Koc et al", "checkbox", False),
-                ("Neural Segmentation", "checkbox", False),
-                ("Silicone Segmentation", "checkbox", True),
+                ("Neural Segmentation", "checkbox", True),
+                ("Silicone Segmentation", "checkbox", False),
             ],
         )
         self.addSubMenu(

@@ -105,10 +105,10 @@ def compute_segmentation_outline(segmentation: torch.tensor, kernel_size=3, bord
     Returns:
         border: (B, 1, H, W) tensor of borders
     """
-    kernel = torch.ones((1, 1, kernel_size, kernel_size), device=segmentation.device)
+    kernel = torch.ones((kernel_size, kernel_size), device=segmentation.device)
 
-    dilated = kornia.morphology.dilation(segmentation, kernel)
-    eroded = kornia.morphology.erosion(segmentation, kernel)
+    dilated = kornia.morphology.dilation(segmentation.unsqueeze(0).unsqueeze(0).float(), kernel).squeeze()
+    eroded = kornia.morphology.erosion(segmentation.unsqueeze(0).unsqueeze(0).float(), kernel).squeeze()
 
     if border_type == "both":
         border = dilated - eroded
@@ -145,9 +145,9 @@ def windows_out_of_bounds(indices, image_size, pad):
 def extractWindow(batch, indices, window_size=7, device="cuda"):
     # Clean Windows, such that no image boundaries are hit
 
-    batch_index = indices[:, 0].int()
-    y = indices[:, 2].floor().int()
-    x = indices[:, 1].floor().int()
+    batch_index = indices[:, 0].long()
+    y = indices[:, 2].long()
+    x = indices[:, 1].long()
 
     y = windows_out_of_bounds(y, batch.shape[1], window_size // 2)
     x = windows_out_of_bounds(x, batch.shape[2], window_size // 2)

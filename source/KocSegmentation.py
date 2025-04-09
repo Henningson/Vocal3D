@@ -198,9 +198,9 @@ class KocSegmentator(BaseSegmentator):
         self.generate()
 
         for i, image in enumerate(self.images):
-            self._segmentations.append(self.segmentImage(image))
-            self._glottal_outlines.append(self.computeGlottalOutline(i))
-            self._glottal_midlines.append(self.computeGlottalMidline(i))
+            self.segmentations.append(self.segmentImage(image))
+            self.glottal_outlines.append(self.computeGlottalOutline(i))
+            self.glottal_midlines.append(self.computeGlottalMidline(i))
         
         self.closedGlottisIndex = self.estimateClosedGlottis()
         self.openGlottisIndex = self.estimateOpenGlottis()
