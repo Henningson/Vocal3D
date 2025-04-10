@@ -110,9 +110,6 @@ class FeatureEstimator:
             shaped_glot_outline = self._glottal_outline_images[index].unsqueeze(0).repeat(3, 1, 1)
             image[shaped_glot_outline > 0] = 0
             image += shaped_glot_outline * color_outline.unsqueeze(-1).unsqueeze(-1)
-            
-            if index == 41:
-                a = 1
 
             if self._glottal_midlines[index][0] is not None:
                 try:
@@ -216,7 +213,7 @@ class NeuralFeatureEstimator(FeatureEstimator):
         super().__init__()
 
         self._flip_horizontal: bool = False
-        self.point_localizer = point_extraction.LSQLocalization(heatmapaxis = 3, local_maxima_window = 7, gauss_window = 3)
+        self.point_localizer = point_extraction.LSQLocalization(heatmapaxis = 3, local_maxima_window = 11, gauss_window = 5)
 
         self._model = NeuralSegmentation.UNETNew().cuda()
         self._model.load_from_dict(torch.load("assets/MKMS.pth.tar"))

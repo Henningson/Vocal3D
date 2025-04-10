@@ -67,6 +67,24 @@ def find_local_maxima_1d(tensor: torch.tensor):
 
     return maxima_indices, tensor[maxima_indices]
 
+
+def find_local_minima_1d(tensor: torch.tensor):
+    # Make sure it's a 1D tensor
+    assert tensor.ndim == 1, "Input must be a 1D tensor"
+
+    # Compare each element to its left and right neighbors
+    left = tensor[:-2]
+    center = tensor[1:-1]
+    right = tensor[2:]
+
+    # A local max is greater than both neighbors
+    minima_mask = (center < left) & (center < right)
+
+    # Indices of the local maxima (offset by +1 because we sliced)
+    minima_indices = torch.nonzero(minima_mask).squeeze() + 1
+
+    return minima_indices, tensor[minima_indices]
+
 def find_local_maxima_2d(tensor: torch.tensor) -> torch.tensor:
     return torch.tensor()
 

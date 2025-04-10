@@ -9,6 +9,17 @@ import torch
 import torch.nn.functional as F
 
 
+# From https://discuss.pytorch.org/t/how-to-do-a-unravel-index-in-pytorch-just-like-in-numpy/12987/3
+# Can't use pytorchs own, since this project started with Pytorch 1.x :(
+# At some point, we should upgrade this.
+def unravel_index(index, shape):
+    out = []
+    for dim in reversed(shape):
+        out.append(index % dim)
+        index = index // dim
+    return tuple(reversed(out))
+
+
 class PointTracker:
     def __init__(self, distance_threshold: float = 5):
         self._distance_threshold = distance_threshold
@@ -26,8 +37,11 @@ class PointTracker:
 
     def draw_points_on_image(self, frame, points) -> torch.tensor:
         empty_frame: torch.tensor = torch.zeros_like(frame)
-        x = points[:, 1].long()
-        y = points[:, 0].long()
+
+        mask = ~torch.isnan(points).any(dim=-1)
+        cleaned_points = points[mask]
+        x = cleaned_points[:, 1].long()
+        y = cleaned_points[:, 0].long()
 
         empty_frame[y, x] = 1
         kornia.morphology.dilation(empty_frame.unsqueeze(0).unsqueeze(0).float(), torch.ones((5, 5), device=frame.device)).squeeze()
@@ -47,7 +61,7 @@ class PointTracker:
         # Smooth 1D tensor
         gaw = cv.gaussian_smooth_1d(gaw, kernel_size=5, sigma=2.0)
 
-        maxima_indices, values = cv.find_local_maxima_1d(gaw)
+        maxima_indices, values = cv.find_local_minima_1d(gaw)
         
         # Find laser points in frames, where glottis is minimal
         laserpoints_when_glottis_closed: List[torch.tensor] = [feature_estimator.laserpointPositions()[maxima_index].float() for maxima_index in maxima_indices]
@@ -65,50 +79,45 @@ class PointTracker:
         nearest_neighbors = torch.concat([nearest_neighbors, nearest_neighbors[-1:]])
 
         per_frame_point_position_estimates: torch.tensor = cv.interpolate_from_neighbors(glottal_maxima_list, nearest_neighbors)
+        per_frame_point_position_estimates = per_frame_point_position_estimates[:, :, [1, 0]]
+
+        A, B, C = per_frame_point_position_estimates.shape
+        flattened: torch.tensor = per_frame_point_position_estimates.clone().reshape(-1, C)
+        batch_indices = torch.arange(0, A, device=per_frame_point_position_estimates.device).repeat_interleave(B).reshape(-1, 1)
+        indexed_point_positions = torch.concat([batch_indices, flattened], dim=1)
 
         # Extract windows from position estimates
-        per_point_crops: List[torch.tensor] = []
-        new_points: torch.tensor = per_frame_point_position_estimates.clone().float()
-        new_points -= 3
-        for index, frame in enumerate(video):
-            crops = cv.extract_windows(frame, per_frame_point_position_estimates[index])
-            in_crop_positions = cv.moment_method(crops)
-            new_points[index] += in_crop_positions
-            per_point_crops.append(crops)
-        
+        crops, y_windows, x_windows = cv.extract_windows_from_batch(video, indexed_point_positions)
+        per_crop_max = crops.amax([-1, -2], keepdim=True)
+        per_crop_min = crops.amin([-1, -2], keepdim=True)
 
-        crops = torch.stack(per_point_crops)
-        reshaped_crops = crops.reshape(-1, 7, 7)
-        per_crop_max = reshaped_crops.amax([-1, -2], keepdim=True)
-        per_crop_min = reshaped_crops.amin([-1, -2], keepdim=True)
-
-        normalized_crops = (reshaped_crops - per_crop_min) / (per_crop_max - per_crop_min)
+        normalized_crops = (crops - per_crop_min) / (per_crop_max - per_crop_min)
 
         # Use 2-layered CNN to classify points
         prediction = self._point_classificator(normalized_crops[:, None, :, :])
         classifications = (torch.sigmoid(prediction) > 0.5) * 1
-        classifications = classifications.reshape(crops.shape[0], crops.shape[1])
+        classifications = classifications.reshape(per_frame_point_position_estimates.shape[0], per_frame_point_position_estimates.shape[1])
 
+
+        point_predictions = per_frame_point_position_estimates
             # 0.1 Reshape points, classes and crops into per frame segments, such that we can easily extract a timeseries.
         # I.e. shape is after this: NUM_POINTS x NUM_FRAMES x ...
-        point_predictions = point_predictions.reshape(
-            video.shape[0], num_points_per_frame, 3
-        )[:, :, [1, 2]].permute(1, 0, 2)
+        point_predictions = point_predictions.permute(1, 0, 2)
         y_windows = y_windows.reshape(
-            video.shape[0], num_points_per_frame, crops.shape[-2], crops.shape[-1]
+            video.shape[0], classifications.shape[1], crops.shape[-2], crops.shape[-1]
         ).permute(1, 0, 2, 3)
         x_windows = x_windows.reshape(
-            video.shape[0], num_points_per_frame, crops.shape[-2], crops.shape[-1]
+            video.shape[0], classifications.shape[1], crops.shape[-2], crops.shape[-1]
         ).permute(1, 0, 2, 3)
-        labels = labels.reshape(video.shape[0], num_points_per_frame).permute(1, 0)
+        labels = classifications.permute(1, 0)
         crops = crops.reshape(
-            video.shape[0], num_points_per_frame, crops.shape[-2], crops.shape[-1]
+            video.shape[0], classifications.shape[1], crops.shape[-2], crops.shape[-1]
         ).permute(1, 0, 2, 3)
 
         specular_duration = 5
         # Iterate over every point and class as well as their respective crops
-        optimized_points = torch.zeros_like(point_predictions) * np.nan
-        optimized_points_on_crops = torch.zeros_like(point_predictions) * np.nan
+        optimized_points = torch.zeros_like(point_predictions) * torch.nan
+        optimized_points_on_crops = torch.zeros_like(point_predictions) * torch.nan
         for points_index, (points, label, crop) in enumerate(
             zip(point_predictions, labels, crops)
         ):
@@ -137,7 +146,10 @@ class PointTracker:
             compute_string = compute_string.replace("0", "E")
             compute_string = compute_string.replace("1", "E")
             compute_string = compute_string.replace("2", "E")
-            # print(compute_string)
+            #print(points_index, compute_string)
+
+            if points_index == 100:
+                a = 1
 
             # Compute sub-pixel position for each point labeled as visible (V)
             for frame_index, label in enumerate(compute_string):
@@ -150,7 +162,7 @@ class PointTracker:
                 )
 
                 # Find local maximum in 5x5 crop
-                local_maximum = torch.unravel_index(
+                local_maximum = unravel_index(
                     torch.argmax(normalized_crop[1:-1, 1:-1]), [5, 5]
                 )
 
@@ -201,11 +213,11 @@ class PointTracker:
                 lerp_alpha = (frame_index - prev_v_index) / (next_v_index - prev_v_index)
                 point_a = optimized_points[points_index, prev_v_index]
                 point_b = optimized_points[points_index, next_v_index]
-                lerped_point = lerp(point_a, point_b, lerp_alpha)
+                lerped_point = cv.lerp(point_a, point_b, lerp_alpha)
 
-            optimized_points[points_index, frame_index] = lerped_point
+                optimized_points[points_index, frame_index] = lerped_point
         
-        return optimized_points
+        return optimized_points[:, :, [1, 0]].permute(1, 0, 2)
 
 
 class SiliconePointTracker(PointTracker):
