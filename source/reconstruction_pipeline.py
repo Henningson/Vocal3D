@@ -1,7 +1,10 @@
 
 import correspondence_estimation
+import Correspondences
 import feature_estimation
+import numpy as np
 import point_tracking
+import RHC
 import surface_reconstruction
 import torch
 import Triangulation
@@ -54,8 +57,8 @@ class ReconstructionPipeline:
     def set_correspondence_matcher(self, correspondence_matcher: correspondence_estimation.CorrespondenceEstimator) -> None:
         self._correspondence_estimator = correspondence_matcher
 
-    def estimate_features(self) -> None:
-        gl_seg, gl_midline, gl_outline, vf_seg, lp_pos, lp_image, gaw = self._feature_estimator.compute_features()
+    def estimate_features(self, video: torch.tensor) -> None:
+        gl_seg, gl_midline, gl_outline, vf_seg, lp_pos, lp_image, gaw = self._feature_estimator.compute_features(video)
         self._glottal_segmentaitons = gl_seg
         self._vocalfold_segmentations = vf_seg
         self._glottal_midlines = gl_midline
@@ -67,19 +70,62 @@ class ReconstructionPipeline:
 
     def track_points(self, video: torch.tensor) -> torch.tensor:
         self._optimized_point_positions = self._point_tracker.track_points(video, self._feature_estimator)
-        point_video = []
-        for frame, points in zip(video, self._optimized_point_positions):
-            image = self._point_tracker.draw_points_on_image(frame, points)
-            point_video.append(image.detach().cpu().numpy())
-        
-        return point_video
+        return self._optimized_point_positions
 
-    def estimate_correspondences(self) -> None:
-        _, maximum_closing_frame = self._glottal_area_waveform.max()
-        self._laserpoint_ids = self._correspondence_estimator.estimate_correspondences(self.camera, self.laser, self._optimized_point_positions, maximum_closing_frame)
+    def estimate_correspondences(self, min_depth: float, max_depth: float, consensus_size: int, iterations: int) -> None:
+        maximum_closing_frame = self._feature_estimator.glottalAreaWaveform().argmin()
+        point_image = self._feature_estimator.create_image_from_points(self._optimized_point_positions[maximum_closing_frame])
+
+        pixelLocations, laserGridIDs = Correspondences.initialize(
+                    self._laser,
+                    self._camera,
+                    point_image.detach().cpu().numpy(),
+                    min_depth,
+                    max_depth,
+                )
+        
+        self.grid2DPixLocations = RHC.RHC(
+            laserGridIDs,
+            pixelLocations,
+            point_image.detach().cpu().numpy(),
+            self._camera,
+            self._laser,
+            consensus_size,
+            iterations,
+        )
+
+
+        # Given that we now have a list of laser beam IDS and pixel positions,
+        # we now need to find the corresponding points in self._optimized_point_positions
+        # as we can not guarantee, that the ordering stayed coherent.
+        # So, we iterate over 
+
+        placeholder_correspondences: np.array = np.zeros(self._optimized_point_positions[maximum_closing_frame].shape, dtype=int) * np.nan
+        np_point_positions: np.array = self._optimized_point_positions.detach().cpu().numpy()[maximum_closing_frame]
+
+        for laserpoint_id, pixel_position in self.grid2DPixLocations:
+            corresponding_id = (np_point_positions.astype(int) == pixel_position.astype(int)).all(axis=-1).argmax()
+            placeholder_correspondences[corresponding_id] = laserpoint_id
+
+        self.point_correspondences = placeholder_correspondences
+        mask = ~np.isnan(self.point_correspondences).any(axis=-1)
+        self.filtered_point_correspondences = self.point_correspondences[mask].astype(int)
+        self.filtered_optimized_points = self._optimized_point_positions.detach().cpu().numpy()[:, mask, :]
+
+
+        #self._laserpoint_ids = self._correspondence_estimator.estimate_correspondences(self.camera, self.laser, self._optimized_point_positions, maximum_closing_frame)
 
     def triangulation(self, min_interval, max_interval) -> None:
-        self._point_clouds = Triangulation.triangulationMat(self._camera, self._laser, self._correspondence_estimator.correspondences(), min_interval, max_interval, min_interval, max_interval)
+        self._point_clouds = Triangulation.triangulationMatNew(
+            self._camera, 
+            self._laser, 
+            self.filtered_point_correspondences, 
+            self.filtered_optimized_points, 
+            min_interval, 
+            max_interval, 
+            min_interval, 
+            max_interval)
+        return self._point_clouds
 
     def surface_reconstruction(self) -> None:
         self._surface_reconstructor.compute_surface(self._feature_estimator, self._point_clouds)

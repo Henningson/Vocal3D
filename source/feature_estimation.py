@@ -80,6 +80,16 @@ class FeatureEstimator:
 
         return upperPoint, lowerPoint
     
+    def create_image_from_points(self, points2D: torch.tensor) -> torch.tensor:
+        # Points2D should be Nx2 with Y,X ordering
+        base_image: torch.tensor = torch.zeros_like(self._glottis_segmentations[0])
+
+        mask = ~torch.isnan(points2D).any(dim=-1)
+        viable_points = points2D[mask]
+
+        base_image[viable_points[:, 0].floor().long(), viable_points[:, 1].floor().long()] = 1
+        return base_image
+
     def create_feature_images(self) -> torch.tensor:
         if self._glottis_segmentations is None:
             return None

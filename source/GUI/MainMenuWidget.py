@@ -63,6 +63,7 @@ class MainMenuWidget(QWidget):
         self.addButton("Triangulate")
         self.addButton("Dense Shape Estimation")
         self.addButton("Least Squares Optimization")
+        self.addButton("Temporal Smoothing")
         self.base_layout.addWidget(QHLine())
         self.addButton("Automatic Reconstruction")
         self.addButton("Save Models")

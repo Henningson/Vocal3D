@@ -1,10 +1,9 @@
 import cv2
-import numpy as np
-from sklearn.neighbors import NearestNeighbors
-
-import helper
 import DiscreteGradientDescent
+import helper
+import numpy as np
 from GridSearch import PointBasedGridSearch
+from sklearn.neighbors import NearestNeighbors
 
 
 def globalAlignment(laserGridStuff, pixelLocations, maxima, laser):
@@ -35,8 +34,8 @@ def globalAlignment(laserGridStuff, pixelLocations, maxima, laser):
     return grid2DPixLocations
 
 
-def RHC(laserGridStuff, pixelLocations, segmentator, camera, laser, set_size, iterations):
-    grid2DPixLocations = globalAlignment(laserGridStuff, pixelLocations, segmentator.getLocalMaxima(segmentator.getClosedGlottisIndex()), laser)   
+def RHC(laserGridStuff, pixelLocations, laserpoint_image, camera, laser, set_size, iterations):
+    grid2DPixLocations = globalAlignment(laserGridStuff, pixelLocations, laserpoint_image, laser)   
 
     N = laser.gridHeight() // 2
     distMin, _ = helper.getPointOnRayFromOrigin(laser.origin(), laser.ray(N)/np.linalg.norm(laser.ray(N)), 40.0)

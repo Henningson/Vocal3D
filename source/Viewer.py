@@ -159,6 +159,7 @@ class Viewer(QWidget):
         self.image_timer_thread.started.connect(self.gen_image_timer_thread)
 
         self.player_widget.slider.valueChanged.connect(self.updatePointCloud)
+        self.player_widget.slider.valueChanged.connect(self.update_images_func)
 
         self.timer_thread.start()
         self.image_timer_thread.start()
@@ -185,6 +186,73 @@ class Viewer(QWidget):
             point_tracking.PointTracker(), 
             correspondence_estimation.CorrespondenceEstimator(), 
             surface_reconstruction.SurfaceReconstructor())
+        
+
+        glottal_outline_images = torch.from_numpy(np.load("load/glottal_outline_images.npy")).cuda()
+        glottis_segmentations = torch.from_numpy(np.load("load/glottis_segmentations.npy",)).cuda()
+        vocalfold_segmentations = torch.from_numpy(np.load("load/vocalfold_segmentations.npy",)).cuda()
+        laserpoint_segmentations = torch.from_numpy(np.load("load/laserpoint_segmentations.npy",)).cuda()
+
+
+        glottal_midlines = []
+        glottal_outlines = []
+        for i in range(475):
+            go = torch.from_numpy(np.load(f"load/glottal_outlines{i:05d}.npy")).cuda()
+            glottal_outlines.append(go)
+
+            gma = torch.from_numpy(np.load(f"load/glottal_midlines_a{i:05d}.npy")).cuda()
+            if (gma == -1).any():
+                gma = None
+
+            gmb = torch.from_numpy(np.load(f"load/glottal_midlines_b{i:05d}.npy")).cuda()
+            if (gmb == -1).any():
+                gmb = None
+
+            glottal_midlines.append([gma, gmb])
+
+
+
+
+        laserpoint_positions = torch.from_numpy(np.load("load/laserpoint_positions.npy")).cuda()
+
+        point_positions = torch.from_numpy(np.load("load/point_positions.npy")).cuda()
+
+        self._reconstruction_pipeline._feature_estimator._glottal_midlines = glottal_midlines
+        self._reconstruction_pipeline._glottal_midlines = glottal_midlines
+
+        self._reconstruction_pipeline._feature_estimator._glottal_outline_images = glottal_outline_images
+
+        self._reconstruction_pipeline._feature_estimator._glottal_outlines = glottal_outlines
+        self._reconstruction_pipeline._glottal_outlines = glottal_outlines
+
+        self._reconstruction_pipeline._feature_estimator._vocalfold_segmentations = vocalfold_segmentations
+        self._reconstruction_pipeline._vocalfold_segmentations = vocalfold_segmentations
+
+        self._reconstruction_pipeline._feature_estimator._laserpoint_segmentations = laserpoint_segmentations
+        self._reconstruction_pipeline._laserpoint_estimates = laserpoint_positions
+
+        self._reconstruction_pipeline._feature_estimator._glottis_segmentations = glottis_segmentations
+        self._reconstruction_pipeline._glottal_segmentaitons = glottis_segmentations
+
+        self._reconstruction_pipeline._feature_estimator._laserpoint_positions = laserpoint_positions
+        self._reconstruction_pipeline._laserpoint_positions = laserpoint_positions
+
+        self._reconstruction_pipeline._optimized_point_positions = point_positions
+
+        feature_images = self._reconstruction_pipeline._feature_estimator.create_feature_images()
+
+        self.segmentations = []
+        for feature_image in feature_images:
+            self.segmentations.append(feature_image.permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8))
+
+        
+        self.graph_widget.updateGraph(
+            self._reconstruction_pipeline._feature_estimator.glottalAreaWaveform().tolist(), self.graph_widget.glottal_seg_graph
+        )
+
+        self.image_widget.point_viewer.add_points(point_positions.detach().cpu().numpy())
+        self.update_images_func()
+        
 
     def update_pipeline(self):
         segmentator = None
@@ -214,7 +282,6 @@ class Viewer(QWidget):
         timer = QTimer(self.timer_thread)
         timer.timeout.connect(self.player_widget.update_frame_when_playing)
         timer.timeout.connect(self.animate_func)
-        timer.timeout.connect(self.update_images_func)
         timer.setInterval(25)
         timer.start()
 
@@ -284,7 +351,7 @@ class Viewer(QWidget):
             self.image_widget.updateImages(
                 self.images[curr_frame],
                 self.segmentations[curr_frame],
-                self.laserdots[curr_frame],
+                curr_frame
             )
 
             if self.menu_widget.widget().getSubmenuValue("Video Generation", "Generate Video"):
@@ -452,11 +519,17 @@ class Viewer(QWidget):
         self.segmentations = self.images
         self.laserdots = self.images
 
+        self.image_widget.point_viewer.add_video(helper.vid_2_QImage(self.images))
+
         self.player_widget.setSliderRange(0, len(self.images))
+        self.player_widget.stop_video_()
 
         self.images_set = True
-
         self.video = torch.from_numpy(np.stack(self.images)).to("cuda")
+
+        self.update_images_func()
+
+
 
     def segmentImages(self):
         segmentator: feature_estimation.FeatureEstimator = None
@@ -470,7 +543,8 @@ class Viewer(QWidget):
         self._reconstruction_pipeline.set_feature_estimator(segmentator)
         
         
-        segmentator.compute_features(self.video)
+        #segmentator.compute_features(self.video)
+        self._reconstruction_pipeline.estimate_features(self.video)
 
         segmentations = list()
         feature_images = segmentator.create_feature_images()
@@ -486,8 +560,8 @@ class Viewer(QWidget):
         self.laserdots = segmentations
 
     def trackPoints(self):
-        laserpoint_images = self._reconstruction_pipeline.track_points(self.video)
-        self.laserdots = laserpoint_images
+        point_positions = self._reconstruction_pipeline.track_points(self.video)
+        self.image_widget.point_viewer.add_points(point_positions.detach().cpu().numpy())
 
     def buildCorrespondences(self):
         min_search_space = float(
@@ -500,35 +574,7 @@ class Viewer(QWidget):
         set_size = int(self.menu_widget.widget().getSubmenuValue("RHC", "Consensus Size"))
         iterations = int(self.menu_widget.widget().getSubmenuValue("RHC", "Iterations"))
 
-        pixelLocations, laserGridIDs = Correspondences.initialize(
-            self.laser,
-            self.camera,
-            self.segmentator,
-            min_search_space,
-            max_search_space,
-        )
-        self.grid2DPixLocations = RHC.RHC(
-            laserGridIDs,
-            pixelLocations,
-            self.segmentator,
-            self.camera,
-            self.laser,
-            set_size,
-            iterations,
-        )
-
-        pixel_coords = np.array(self.grid2DPixLocations)[:, 1, :].astype(np.int32)
-        debug_img = np.zeros(self.segmentator.getImage(0).shape, np.uint8)
-        debug_img[pixel_coords[:, 0], pixel_coords[:, 1]] = 255
-        debug_img = cv2.dilate(debug_img, np.ones((3, 3)))
-
-        base_img = self.images[self.segmentator.getClosedGlottisIndex()].copy()
-        base_img = cv2.cvtColor(base_img, cv2.COLOR_GRAY2BGR)
-        base_img = base_img | cv2.cvtColor(debug_img, cv2.COLOR_GRAY2BGR)
-
-        self.image_widget.updateImage(
-            base_img, self.image_widget.getWidget("Closed Vocal Folds")
-        )
+        self._reconstruction_pipeline.estimate_correspondences(min_search_space, max_search_space, set_size, iterations)
 
     def triangulate(self):
         min_search_space = float(
@@ -537,21 +583,7 @@ class Viewer(QWidget):
         max_search_space = float(
             self.menu_widget.widget().getSubmenuValue("RHC", "Maximum Distance")
         )
-
-        temporalCorrespondence = Correspondences.generateFramewise(
-            self.segmentator, self.grid2DPixLocations
-        )
-        self.triangulatedPoints = np.array(
-            Triangulation.triangulationMat(
-                self.camera,
-                self.laser,
-                temporalCorrespondence,
-                min_search_space,
-                max_search_space,
-                min_search_space,
-                max_search_space,
-            )
-        )
+        self.points_3d = self._reconstruction_pipeline.triangulation(min_search_space, max_search_space)
 
     def denseShapeEstimation(self):
         zSubdivisions = int(
@@ -569,9 +601,9 @@ class Viewer(QWidget):
             self.rightPoints,
             self.pointclouds,
         ) = SiliconeSurfaceReconstruction.controlPointBasedARAP(
-            self.triangulatedPoints,
+            self.points_3d,
             self.camera,
-            self.segmentator,
+            self._reconstruction_pipeline._feature_estimator,
             zSubdivisions=zSubdivisions,
         )
 
@@ -659,6 +691,7 @@ class Viewer(QWidget):
 
     def automaticReconstruction(self):
         self.segmentImages()
+        self.trackPoints()
         self.buildCorrespondences()
         self.triangulate()
         self.denseShapeEstimation()

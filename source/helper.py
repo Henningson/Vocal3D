@@ -1,7 +1,10 @@
-import numpy as np
-import cv2
 import math
 import os
+from typing import List
+
+import cv2
+import numpy as np
+from PyQt5.QtGui import QImage
 
 UP = 0
 RIGHT = 1
@@ -387,3 +390,41 @@ def generate_laserdot_images(triangulatedPoints, images, camera, segmentation):
         laserdots.append(expanded_image)
 
     return laserdots
+
+
+
+def np_2_QImage(image: np.array) -> QImage:
+    if len(image.shape) == 2:
+        image = image[:, :, None].repeat(3, -1)
+                                    
+    height, width, channel = image.shape
+
+    bytesPerLine = channel * width
+    return QImage(
+        image.copy().data,
+        width,
+        height,
+        bytesPerLine,
+        QImage.Format_RGBA8888 if channel == 4 else QImage.Format_RGB888,
+    )
+
+
+def qImage_2_np(qimage: QImage) -> np.array:
+    if qimage.format() == QImage.Format_RGB888:
+        width = qimage.width()
+        height = qimage.height()
+        ptr = qimage.bits()
+        ptr.setsize(height * width * 3)
+        return np.array(ptr).reshape((height, width, 3))
+
+    elif qimage.format() == QImage.Format_RGBA8888:
+        width = qimage.width()
+        height = qimage.height()
+        ptr = qimage.bits()
+        ptr.setsize(height * width * 4)
+        return np.array(ptr).reshape((height, width, 4))
+
+
+# We assume NumPy-Style format [NUM_FRAMES, HEIGHT, WIDTH, CHANNEL]
+def vid_2_QImage(video: np.array) -> List[QImage]:
+    return [np_2_QImage(image) for image in video]

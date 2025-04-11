@@ -1,12 +1,12 @@
-import numpy as np
 import cv2
+import helper
+import numpy as np
+import torch
 from sklearn.neighbors import NearestNeighbors
 
-import helper
 
-
-def initialize(laser, camera, segmentator, minInterval, maxInterval):
-    maxima = segmentator.getLocalMaxima(segmentator.getClosedGlottisIndex()).copy()
+def initialize(laser, camera, maxima_image, minInterval, maxInterval):
+    maxima = maxima_image
     
     locations = list()
     ids = list()
@@ -15,7 +15,7 @@ def initialize(laser, camera, segmentator, minInterval, maxInterval):
         for y in range(laser.gridHeight() - 1, -1, -1):
             laserRay = laser.ray(y, x)
 
-            mask = helper.generateMask(np.zeros((segmentator.getImage(0).shape[0], segmentator.getImage(0).shape[1]), np.uint8), camera.intrinsic(), laser.origin(), laserRay, minInterval, maxInterval,  2, 2)
+            mask = helper.generateMask(np.zeros_like(maxima_image, dtype=np.uint8), camera.intrinsic(), laser.origin(), laserRay, minInterval, maxInterval,  2, 2)
             masked_maxima = maxima * mask
             masked_points = masked_maxima.nonzero()
 

@@ -1,4 +1,5 @@
 import cv2
+from cropAndSubpixelPoints import PointViewer
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
@@ -11,14 +12,13 @@ class ImageViewerWidget(QWidget):
         self.base_layout = QHBoxLayout(self)
         
         self.imageDICT = {}
+        self.point_viewer = PointViewer(None, None)
 
         self.addImageWidget("Main", (256, 512))
         self.base_layout.addWidget(QVLine())
         self.addImageWidget("Segmentation", (256, 512))
         self.base_layout.addWidget(QVLine())
-        self.addImageWidget("Laserdots", (256, 512))
-        self.base_layout.addWidget(QVLine())
-        self.addImageWidget("Closed Vocal Folds", (256, 512))
+        self.base_layout.addWidget(self.point_viewer)
 
     def addImageWidget(self, title, size):
         widg = QWidget(self)
@@ -36,11 +36,12 @@ class ImageViewerWidget(QWidget):
         lay.addWidget(image_widg)
         self.base_layout.addWidget(widg)
 
-    def updateImages(self, a, b, c):
+    def updateImages(self, a, b, current_frame):
         # We assume images to be in RGB Format
         self.updateImage(a, self.imageDICT["Main"])
         self.updateImage(b, self.imageDICT["Segmentation"])
-        self.updateImage(c, self.imageDICT["Laserdots"])
+        self.point_viewer.change_frame(current_frame)
+        self.point_viewer.redraw()
 
     def convertImage(self, image):
         # Check if Mono

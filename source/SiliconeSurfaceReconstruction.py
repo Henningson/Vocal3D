@@ -1,49 +1,36 @@
-import torch
-import numpy as np
-import matplotlib.pyplot as plt
 import argparse
-
-import cv2
-import M5
-import helper
-import Timer
-import os
 import math
-import scipy.ndimage
-import SurfaceReconstruction
-import Camera
-
-from pytorch3d.loss import chamfer_distance
-from torch_nurbs_eval.surf_eval import SurfEval
-from scipy.spatial import Delaunay, KDTree
-from geomdl import BSpline
-from geomdl import utilities
-from tqdm import tqdm
-
-import matplotlib.pyplot as plt
-from geomdl.visualization import VisMPL
-from matplotlib import cm
-
-from Laser import Laser
-
-from sklearn.decomposition import PCA
-import visualization
+import os
+import threading
+import time
 
 import ARAP
-
-
-
+import Camera
+import cv2
+import helper
+import igl
+import M5
+import matplotlib.pyplot as plt
+import numpy as np
+import scipy.ndimage
+import SurfaceReconstruction
+import Timer
+import torch
+import Viewer
+import visualization
+from geomdl import BSpline, utilities
+from geomdl.visualization import VisMPL
+from Laser import Laser
+from matplotlib import cm
 from pycallgraph import PyCallGraph
 from pycallgraph.output import GraphvizOutput
-
-
-
 from PyQt5.QtWidgets import QApplication
-import Viewer
-import igl
-import os
-import time
-import threading
+from pytorch3d.loss import chamfer_distance
+from scipy.spatial import Delaunay, KDTree
+from sklearn.decomposition import PCA
+from torch_nurbs_eval.surf_eval import SurfEval
+from tqdm import tqdm
+
 
 # Code from: https://stackoverflow.com/a/59204638
 def rotation_matrix_from_vectors(vec1, vec2):
@@ -215,14 +202,27 @@ def controlPointBasedARAP(triangulatedPoints, camera, segmentator, zSubdivisions
         z = (-planeNormal[0] * xx - planeNormal[1] * yy - (-centroid[0].dot(planeNormal))) * 1. / planeNormal[2]
 
         # Project Glottal Outline Points into Pointcloud
-        glottalOutline = segmentator.getGlottalOutline(i)
+        glottalOutline = np.flip(segmentator.glottalOutlines()[i].detach().cpu().numpy(), 1)
         glottalCameraRays = camera.getRayMat(glottalOutline)
         t = helper.rayPlaneIntersectionMat(centroid, np.expand_dims(planeNormal, 0), np.zeros(glottalCameraRays.shape), glottalCameraRays) 
         glottalOutlinePoints = t * glottalCameraRays
 
 
         # Project Glottal Midline Extrema into Pointcloud
-        upperMidLine, lowerMidLine = segmentator.getGlottalMidline(i)
+        
+        upperMidLine, lowerMidLine = segmentator.glottalMidlines()[i]
+
+        # Search for the next best midline if the computation didnt work.
+        if upperMidLine is None:
+            index: int = 0
+            while upperMidLine is None:
+                index += 1
+                upperMidLine, lowerMidLine = segmentator.glottalMidlines()[i + index]
+
+
+        upperMidLine = upperMidLine.detach().cpu().numpy()
+        lowerMidLine = lowerMidLine.detach().cpu().numpy()
+
         gml_ray1 = camera.getRay(upperMidLine)
         gml_ray2 = camera.getRay(lowerMidLine)
         _, t1 = helper.rayPlaneIntersection(centroid[0], planeNormal, np.zeros((3)), gml_ray1) 
@@ -230,7 +230,7 @@ def controlPointBasedARAP(triangulatedPoints, camera, segmentator, zSubdivisions
         gml_point1 = gml_ray1*t1
         gml_point2 = gml_ray2*t2
 
-        # Get everything into tehe origin
+        # Get everything into the origin
         glottalOutlinePoints = glottalOutlinePoints - centroid
         gml_point1 = np.expand_dims(gml_point1, 0) - centroid
         gml_point2 = np.expand_dims(gml_point2, 0) - centroid

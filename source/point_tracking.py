@@ -217,7 +217,94 @@ class PointTracker:
 
                 optimized_points[points_index, frame_index] = lerped_point
         
-        return optimized_points[:, :, [1, 0]].permute(1, 0, 2)
+
+        # convert points to frame x num_points x 2 [Y,X]
+        optimized_points = optimized_points[:, :, [1, 0]].permute(1, 0, 2)
+
+        # smooth points
+        #optimized_points = smooth_points(optimized_points)
+
+        # Filter points that fall into the glottal region
+        optimized_points = filter_points_on_glottis(optimized_points, feature_estimator.glottisSegmentations())
+
+        optimized_points = filter_points_by_intensity(optimized_points, video, intensity_threshold=50)
+
+        return optimized_points
+
+
+def smooth_points(points: torch.tensor) -> torch.tensor:
+    # We know that only values are nan, that lie at the border of the frames.
+    # So we can easily convolve with a gaussian kernel
+
+    # Define a Gaussian kernel
+    def gaussian_kernel(size, sigma):
+        x = torch.arange(-size // 2 + 1, size // 2 + 1)
+        kernel = torch.exp(-0.5 * (x / sigma) ** 2)
+        kernel /= kernel.sum()  # Normalize
+        return kernel
+
+    kernel_size = 5
+    sigma = 1.0
+    kernel = gaussian_kernel(kernel_size, sigma).view(1, 1, -1)
+    kernel = kernel.to(points.device)
+
+    for point_over_time in points:
+        is_not_nan = ~torch.isnan(point_over_time[:, 0])
+        non_nan_points = point_over_time[is_not_nan]
+
+        if len(non_nan_points) < 10:
+            continue
+
+        a = non_nan_points.permute(1, 0).unsqueeze(1)
+        padded_points = torch.nn.functional.pad(
+            a, (kernel_size // 2, kernel_size // 2), "replicate"
+        )
+        smoothed_points = F.conv1d(padded_points, kernel.float(), padding=0)
+        smoothed_points = smoothed_points.squeeze(1).permute(1, 0)
+        point_over_time[is_not_nan] = smoothed_points
+
+    return points
+
+
+def filter_points_on_glottis(
+    point_predictions: torch.tensor, vocalfold_segmentations: torch.tensor) -> torch.tensor:
+    # Convert all nans to 0
+    filtered_points = torch.nan_to_num(point_predictions, 0)
+
+    # Floor points and cast such that we have pixel coordinates
+    point_indices = torch.floor(filtered_points).long()
+
+    for frame_index, (points_in_frame, segmentation) in enumerate(
+        zip(point_indices, vocalfold_segmentations)
+    ):
+        hits = segmentation[points_in_frame[:, 0], points_in_frame[:, 1]]
+        hits = (hits == 0) * 1
+        filtered_points[frame_index] *= hits[:, None]
+
+    filtered_points[filtered_points == 0] = torch.nan
+
+    return filtered_points
+
+
+
+def filter_points_by_intensity(
+    point_predictions: torch.tensor, video: torch.tensor, intensity_threshold: int = 20) -> torch.tensor:
+    # Convert all nans to 0
+    filtered_points = torch.nan_to_num(point_predictions, 0)
+
+    # Floor points and cast such that we have pixel coordinates
+    point_indices = torch.floor(filtered_points).long()
+
+    for frame_index, (points_in_frame, frame) in enumerate(
+        zip(point_indices, video)
+    ):
+        hits = frame[points_in_frame[:, 0], points_in_frame[:, 1]]
+        hits = (hits > intensity_threshold) * 1
+        filtered_points[frame_index] *= hits[:, None]
+
+    filtered_points[filtered_points == 0] = torch.nan
+
+    return filtered_points
 
 
 class SiliconePointTracker(PointTracker):

@@ -1,5 +1,5 @@
-import numpy as np
 import helper
+import numpy as np
 import visualization
 
 
@@ -26,6 +26,28 @@ def triangulation(camera, laser, framewiseCorrespondences, minInterval, maxInter
     visualization.show_3d_triangulation(points3D)
     #visualization.write_images("epipolarConstraints/MK", points3D)
 
+
+def triangulationMatNew(camera, laser, laser_correspondences, points_2d, minInterval, maxInterval, distMin, distMax):
+    
+    points3D = list()
+    
+    for points_per_frame in points_2d:
+        cameraRays = camera.getRayMat(np.flip(points_per_frame, axis=1))
+        linearizedIDs = laser.getNfromXY(laser_correspondences[:, 0], laser_correspondences[:, 1])
+        laserRays = laser.rays()[linearizedIDs]
+        origin = np.expand_dims(laser.origin(), 0)
+
+        aPoints, bPoints, distances = helper.MatLineLineIntersection(cameraRays*minInterval, cameraRays*maxInterval, origin + distMin*laserRays, origin + distMax*laserRays)
+
+        worldPositions = aPoints + (bPoints - aPoints) / 2.0
+        
+        #Filter NaNs and badly estimated 3-D Positions
+        worldPositions = worldPositions[distances < 5.0]
+
+        points3D.append((aPoints + ((bPoints - aPoints) / 2.0)))
+
+    return points3D
+
 def triangulationMat(camera, laser, framewiseCorrespondences, minInterval, maxInterval, distMin, distMax):
     
     points3D = list()
@@ -37,7 +59,7 @@ def triangulationMat(camera, laser, framewiseCorrespondences, minInterval, maxIn
     for k in range(laser2DPositions.shape[1]):
         positions2D = laser2DPositions[:, k, :]
 
-        cameraRays = camera.getRayMat(np.flip(positions2D, axis=1)) # The error is here!
+        cameraRays = camera.getRayMat(np.flip(positions2D, axis=1))
         linearizedIDs = laser.getNfromXY(gridIDs[:, 0], gridIDs[:, 1])
         laserRays = laser.rays()[linearizedIDs]
         origin = np.expand_dims(laser.origin(), 0)
