@@ -206,12 +206,13 @@ class LSQLocalization:
             local_maxima = local_maxima * segmentation
 
         # Find local maxima and indices at which we need to split the data
-        maxima_indices = local_maxima.nonzero()
 
-        return maxima_indices
+        maxima_indices = local_maxima.nonzero()
         split_indices = get_split_indices(
             maxima_indices[:, 0], device=self.device
         ).tolist()
+
+        return torch.tensor_split(maxima_indices[:, [1, 2]], split_indices)
 
         # Extract windows around the local maxima
         intensities, y_windows, x_windows = cv.extract_windows_from_batch(

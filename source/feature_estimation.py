@@ -3,6 +3,7 @@ import os
 from typing import List, Tuple
 
 import cv
+import cv2
 import kornia
 import models
 import NeuralSegmentation
@@ -130,6 +131,28 @@ class FeatureEstimator:
             feature_images.append(torchvision.transforms.functional.hflip(image) if self._flip_horizontal else image)
 
         return torch.stack(feature_images)
+
+    def to(self, device):
+        for index, midline in enumerate(self._glottal_midlines):
+            self._glottal_midlines[index][0] = midline[0].to(device)
+            self._glottal_midlines[index][1] = midline[1].to(device)
+
+        self._glottal_outline_images.to(device)
+        for index, glottal_outline in enumerate(self._glottal_outlines):
+            self._glottal_outlines[index] = glottal_outline.to(device)
+
+        self._vocalfold_segmentations = self._vocalfold_segmentations.to(device)
+        self._glottis_segmentations = self._glottis_segmentations.to(device)
+
+        self._laserpoint_segmentations = self._laserpoint_segmentations.to(device)
+
+        for index, lp in enumerate(self._laserpoint_positions):
+            self._laserpoint_positions[index] = lp.to(device)
+
+        if self._vocalfold_bounding_box is not None:
+            for index, bb in enumerate(self._vocalfold_bounding_box):
+                self._vocalfold_bounding_box[index][0] = bb[0].to(device)
+                self._vocalfold_bounding_box[index][1] = bb[1].to(device)
 
 
     def compute_features(self, video: torch.tensor) -> None:
@@ -270,10 +293,10 @@ class NeuralFeatureEstimator(FeatureEstimator):
         super().__init__()
 
         self._flip_horizontal: bool = False
-        self.point_localizer = point_extraction.LSQLocalization(heatmapaxis = 3, local_maxima_window = 11, gauss_window = 5)
+        self.point_localizer = point_extraction.LSQLocalization(heatmapaxis = 3, local_maxima_window = 7, gauss_window = 5)
 
         self._model = NeuralSegmentation.UNETNew().cuda()
-        self._model.load_from_dict(torch.load("assets/LSRH.pth.tar"))
+        self._model.load_from_dict(torch.load("assets/CFCM.pth.tar"))
 
     def compute_features(self, video: torch.tensor) -> None:
         self._glottis_segmentations = torch.zeros_like(video)
@@ -287,47 +310,134 @@ class NeuralFeatureEstimator(FeatureEstimator):
 
         self._glottal_midlines = []
 
+        num_frames = video.shape[0]
+        # video_clone = (video.clone().unsqueeze(1).float() / 255).repeat(1, 3, 1, 1)
+        batch_size = 8
+        # features = []
+        # with torch.no_grad():
+        #     for i in range(0, num_frames, batch_size):
+        #         batch = video[i:i+batch_size]  # shape: [B, C, H, W]
+        #         with torch.no_grad():
+        #             output = self._model(batch)  # assume output is [B, ...]
+        #         features.append(output)
 
-        for index, image in enumerate(video):
-            image = image.unsqueeze(0).unsqueeze(0).float() / 255
-            image = image.repeat(1, 3, 1, 1)
-            pred_seg = self._model(image).squeeze()
-            softmaxed = torch.softmax(pred_seg, dim=0)
-            labels = pred_seg.argmax(dim=0).byte()
+        # torch.cat(features, dim=0)
 
-            self._laserpoint_segmentations[index] = (labels == 3) * 1
-            labels[labels == 3] = 2
-            vocalfold_segmentation = (labels == 2) * 1
-            glottis_segmentation = (labels == 1) * 1
 
-            self._vocalfold_segmentations[index] = vocalfold_segmentation
-            self._glottis_segmentations[index] = glottis_segmentation
-            laserpoints = self.point_localizer.test(softmaxed.unsqueeze(0))[:, [1,2]]
-            self._laserpoint_positions.append(laserpoints)
+        with torch.no_grad():
+            torch.cuda.synchronize()
+            start_event_total = torch.cuda.Event(enable_timing=True)
+            start_event_nn = torch.cuda.Event(enable_timing=True)
+            start_event_pe = torch.cuda.Event(enable_timing=True)
+            start_event_seg = torch.cuda.Event(enable_timing=True)
+            start_event_gaw = torch.cuda.Event(enable_timing=True)
+            start_event_mid = torch.cuda.Event(enable_timing=True)
+            end_event_nn = torch.cuda.Event(enable_timing=True)
+            end_event_pe = torch.cuda.Event(enable_timing=True)
+            end_event_seg = torch.cuda.Event(enable_timing=True)
+            end_event_gaw = torch.cuda.Event(enable_timing=True)
+            end_event_mid = torch.cuda.Event(enable_timing=True)
+            end_event = torch.cuda.Event(enable_timing=True)
+            start_event_total.record()
 
-            glottal_outline_image = cv.compute_segmentation_outline(glottis_segmentation)
-            self._glottal_outline_images[index] = glottal_outline_image
-            self._glottal_outlines.append(torch.nonzero(glottal_outline_image))
+            elapsed_time_nn = 0.0
+            elapsed_time_pe = 0.0
+            elapsed_time_seg = 0.0
 
-        gaw = self.glottalAreaWaveform()
-        maxima_indices, values = cv.find_local_maxima_1d(self.glottalAreaWaveform())
-        maxima_indices = maxima_indices[values > gaw.median()]
-        maxima_indices = maxima_indices.tolist()
-        maxima_indices.append(video.shape[0] - 1)
-        maxima_indices.insert(0, 0)
-        gm = [self.compute_glottal_midline(self._glottis_segmentations[index]) for index in maxima_indices]
+            for i in range(0, num_frames, batch_size):
+                #print(i)
+                batch = video[i:i+batch_size] 
+                image = batch.unsqueeze(1).float().repeat(1, 3, 1, 1) / 255
+                #image = image.unsqueeze(0).unsqueeze(0).float() / 255
+                #image = image.repeat(1, 3, 1, 1)
+                start_event_nn.record()
+                pred_seg = self._model(image).squeeze()
+                softmaxed = torch.softmax(pred_seg, dim=1)
+                labels = pred_seg.argmax(dim=1).byte()
 
-        maxima_indices[-1] = maxima_indices[-1] + 1
-        gm[0] = gm[1]
-        gm[-1] = gm[-2]
+                wat = []
+                for label in labels:
+                    _, _, stats, centroids = cv2.connectedComponentsWithStats(label.detach().cpu().numpy(), 4)
+                    stats = np.array(stats)
+                    area = stats[:, 4]
+                    stats = stats[:, :4]
+                    area = area.tolist()
+                    stats = stats.tolist()
+                    sorted_stats = sorted(zip(area, stats))
 
-        points_a = cv.interpolate_from_neighbors(maxima_indices, torch.stack([gm[index][0] for index in range(len(gm))]).unsqueeze(1)).squeeze()
-        points_b = cv.interpolate_from_neighbors(maxima_indices, torch.stack([gm[index][1] for index in range(len(gm))]).unsqueeze(1)).squeeze()
+                    glottal_roi = torch.zeros(label.shape, device=labels.device)
+                    x, y, w, h = sorted_stats[-2][1]
+                    glottal_roi[y:y+h, x:x+w] = 1
+                    wat.append(glottal_roi)
+                wat = torch.stack(wat)
+                labels = labels * wat
 
-        glottal_midlines = []
-        for i in range(points_a.shape[0]):
-            glottal_midlines.append([points_a[i], points_b[i]])
-        self._glottal_midlines = glottal_midlines
+
+                end_event_nn.record()
+                self._laserpoint_segmentations[i:i+batch_size] = (labels == 3) * 1
+
+                labels[labels == 3] = 2
+                vocalfold_segmentation = (labels == 2) * 1
+                glottis_segmentation = (labels == 1) * 1
+
+                self._vocalfold_segmentations[i:i+batch_size] = vocalfold_segmentation
+                self._glottis_segmentations[i:i+batch_size] = glottis_segmentation
+
+                start_event_pe.record()
+                laserpoints = self.point_localizer.test(softmaxed)
+                self._laserpoint_positions += laserpoints
+                end_event_pe.record()
+
+                start_event_seg.record()
+                glottal_outline_image = cv.compute_segmentation_outline_batch(glottis_segmentation)
+                self._glottal_outline_images[i:i+batch_size] = glottal_outline_image
+                for temp in glottal_outline_image:
+                    self._glottal_outlines.append(temp.nonzero())
+                end_event_seg.record()
+
+
+                torch.cuda.synchronize()
+                elapsed_time_nn += start_event_nn.elapsed_time(end_event_nn)
+                elapsed_time_pe += start_event_pe.elapsed_time(end_event_pe)
+                elapsed_time_seg += start_event_seg.elapsed_time(end_event_seg)
+            print(f"Time NN: {elapsed_time_nn:.3f} ms for video {video.shape}")
+            print(f"Time PE: {elapsed_time_pe:.3f} ms for video {video.shape}")
+            print(f"TIME SEG: {elapsed_time_seg:.3f} ms for video {video.shape}")
+
+
+            start_event_gaw.record()
+            gaw = self.glottalAreaWaveform()
+            end_event_gaw.record()
+
+            start_event_mid.record()
+            maxima_indices, values = cv.find_local_maxima_1d(gaw)
+            maxima_indices = maxima_indices[values > gaw.median()]
+            maxima_indices = maxima_indices.tolist()
+            maxima_indices.append(video.shape[0] - 1)
+            maxima_indices.insert(0, 0)
+            gm = [self.compute_glottal_midline(self._glottis_segmentations[index]) for index in maxima_indices]
+
+            maxima_indices[-1] = maxima_indices[-1] + 1
+            gm[0] = gm[1]
+            gm[-1] = gm[-2]
+
+            points_a = cv.interpolate_from_neighbors(maxima_indices, torch.stack([gm[index][0] for index in range(len(gm))]).unsqueeze(1)).squeeze()
+            points_b = cv.interpolate_from_neighbors(maxima_indices, torch.stack([gm[index][1] for index in range(len(gm))]).unsqueeze(1)).squeeze()
+
+            glottal_midlines = []
+            for i in range(points_a.shape[0]):
+                glottal_midlines.append([points_a[i], points_b[i]])
+            self._glottal_midlines = glottal_midlines
+            end_event_mid.record()
+
+            end_event.record()
+            torch.cuda.synchronize()
+            elapsed_time_ms = start_event_total.elapsed_time(end_event)
+            elapsed_time_gaw = start_event_gaw.elapsed_time(end_event_gaw)
+            elapsed_time_mid = start_event_mid.elapsed_time(end_event_mid)
+            print(f"Time GAW: {elapsed_time_gaw:.3f} ms for video {video.shape}")
+            print(f"Time MID: {elapsed_time_mid:.3f} ms for video {video.shape}")
+            print(f"Feature Estimation Time: {elapsed_time_ms:.3f} ms for video {video.shape}")
 
         return self._glottis_segmentations, self._glottal_midlines, self._glottal_outlines, self._vocalfold_segmentations, self._laserpoint_positions, self._laserpoint_segmentations, self.glottalAreaWaveform()
 

@@ -34,15 +34,16 @@ class MainMenuWidget(QWidget):
             "Segmentation",
             [
                 ("Koc et al", "checkbox", False),
-                ("Neural Segmentation", "checkbox", False),
-                ("Silicone Segmentation", "checkbox", True),
+                ("Neural Segmentation", "checkbox", True),
+                ("Silicone Segmentation", "checkbox", False),
             ],
         )
         self.addSubMenu(
             "Point Tracking",
             [
-                ("Invivo", "checkbox", False),
-                ("Silicone", "checkbox", True),
+                ("InvivoSlow", "checkbox", False),
+                ("InvivoFast", "checkbox", True),
+                ("Silicone", "checkbox", False),
             ],
         )
         self.addSubMenu(
@@ -66,7 +67,7 @@ class MainMenuWidget(QWidget):
         self.addSubMenu(
             "CUDA",
             [
-                ("Use", "checkbox", False)
+                ("Use", "checkbox", True)
             ],
         )
         self.addSubMenu(
@@ -78,7 +79,21 @@ class MainMenuWidget(QWidget):
             "Video Generation",
             [("Generate Video", "checkbox", False), ("Path", "field", "temp")],
         )
-
+        self.addSubMenu("Camera",
+            [("Near Plane", "field", 0.01),
+             ("Far Plane", "field", 100.0),
+             ("FOV", "field", 60.0),
+             ("X-Pos", "field", 0),
+             ("Y-Pos", "field", 2.0),
+             ("Z-Pos", "field", 0),
+             ("X-Dir", "field", 0.0),
+             ("Y-Dir", "field", -1.0),
+             ("Z-Dir", "field", 0.0)])
+        
+        self.base_layout.addWidget(QHLine())
+        self.addButton("Apply Cam")
+        self.addButton("Top-Down Cam")
+        self.addButton("45Deg Cam")
         self.base_layout.addWidget(QHLine())
         self.addButton("Compute Features")
         self.addButton("Track Points")

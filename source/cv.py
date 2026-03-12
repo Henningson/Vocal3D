@@ -395,6 +395,36 @@ def compute_segmentation_outline(segmentation: torch.tensor, kernel_size=3, bord
     return (border > 0).float()
 
 
+def compute_segmentation_outline_batch(segmentation: torch.tensor, kernel_size=3, border_type="inner") -> List[torch.tensor]:
+    """
+    Extracts the border of a binary segmentation mask using Kornia.
+
+    Args:
+        mask: (B, 1, H, W) tensor of binary masks (0 or 1)
+        kernel_size: size of the morphological kernel (should be odd)
+        border_type: 'both' for dilation - erosion, 'inner' for mask - erosion
+
+    Returns:
+        border: (B, 1, H, W) tensor of borders
+    """
+    kernel = torch.ones((kernel_size, kernel_size), device=segmentation.device)
+
+    dilated = kornia.morphology.dilation(segmentation.unsqueeze(1).float(), kernel).squeeze()
+    eroded = kornia.morphology.erosion(segmentation.unsqueeze(1).float(), kernel).squeeze()
+
+    if border_type == "both":
+        border = dilated - eroded
+    elif border_type == "inner":
+        border = segmentation - eroded
+    elif border_type == "outer":
+        border = dilated - segmentation
+    else:
+        raise ValueError("border_type must be 'both', 'inner', or 'outer'")
+
+    # Ensure binary result
+    return (border > 0).float()
+
+
 # Indices [n] Tensor
 # Image size integer
 # pad is window_size//2

@@ -52,7 +52,7 @@ class Viewer(QWidget):
     def __init__(self):
         super().__init__()
         self.viewer_palette = {
-            "viewer_background": "#252526",
+            "viewer_background":"#252526", # "#FFFFFF",
             "viewer_widget_border_color": "#555555",
             "menu_background": "#333333",
             "ui_element_background": "#3e3e3e",
@@ -172,6 +172,10 @@ class Viewer(QWidget):
         self.image_widget.opacity_widget.widget_features["GO"]["checkbox"].stateChanged.connect(self.toggleGoVisibility)
         self.image_widget.opacity_widget.show_controlpoints.stateChanged.connect(self.toggleControlpointVisibility)
         self.image_widget.opacity_widget.show_triangulated_points.stateChanged.connect(self.togglePointVisibility)
+
+        self.menu_widget.widget().button_dict["Apply Cam"].clicked.connect(self.applyCameraParams)
+        self.menu_widget.widget().button_dict["Top-Down Cam"].clicked.connect(self.setTopDownCamera)
+        self.menu_widget.widget().button_dict["45Deg Cam"].clicked.connect(self.set45DegCamera)
 
         self.timer_thread.start()
         self.image_timer_thread.start()
@@ -640,6 +644,40 @@ class Viewer(QWidget):
         self.update_images_func()
 
 
+    def applyCameraParams(self):
+        self.viewer_widget.camera.field_of_view = float(
+            self.menu_widget.widget().getSubmenuValue("Camera", "FOV")
+        )
+        self.viewer_widget.camera.near_plane = float(
+            self.menu_widget.widget().getSubmenuValue("Camera", "Near Plane")
+        )
+        self.viewer_widget.camera.far_plane = float(
+            self.menu_widget.widget().getSubmenuValue("Camera", "Far Plane")
+        )
+
+        self.viewer_widget.camera.set_position_and_direction(np.array([float(
+            self.menu_widget.widget().getSubmenuValue("Camera", "X-Pos")
+        ), float(
+            self.menu_widget.widget().getSubmenuValue("Camera", "Y-Pos")
+        ), float(
+            self.menu_widget.widget().getSubmenuValue("Camera", "Z-Pos")
+        )]), np.array([float(
+            self.menu_widget.widget().getSubmenuValue("Camera", "X-Dir")
+        ), float(
+            self.menu_widget.widget().getSubmenuValue("Camera", "Y-Dir")
+        ), float(
+            self.menu_widget.widget().getSubmenuValue("Camera", "Z-Dir")
+        )]))
+    
+    def setTopDownCamera(self):
+        self.viewer_widget.camera.set_position_and_direction(np.array([0.0, 8.0, 0.5]), np.array([0.0, -0.999, 0.0001]))
+    
+    
+    def set45DegCamera(self):
+        self.viewer_widget.camera.set_position_and_direction(np.array([0.0, 2.0, -8.5]), np.array([0.0, -0.25, 1.0]))
+        #self.viewer_widget.camera.current_eye = self.viewer_widget.camera.eye
+        #self.viewer_widget.camera.current_target = self.viewer_widget.camera.target
+
 
     def computeFeatures(self):
         feature_estimator: feature_estimation.FeatureEstimator = None
@@ -677,8 +715,10 @@ class Viewer(QWidget):
         use_cuda = self.menu_widget.widget().getSubmenuValue("CUDA", "Use")
 
         point_tracker: point_tracking.PointTrackerBase = None
-        if self.menu_widget.widget().getSubmenuValue("Point Tracking", "Invivo"):
-            point_tracker = point_tracking.InvivoPointTrackerNew()
+        if self.menu_widget.widget().getSubmenuValue("Point Tracking", "InvivoSlow"):
+            point_tracker = point_tracking.InvivoPointTracker()
+        if self.menu_widget.widget().getSubmenuValue("Point Tracking", "InvivoFast"):
+            point_tracker = point_tracking.InvivoPointTrackerNewNew()
         elif self.menu_widget.widget().getSubmenuValue("Point Tracking", "Silicone"):
             point_tracker = point_tracking.SiliconePointTracker()
         else:
@@ -711,7 +751,12 @@ class Viewer(QWidget):
             return
         
         self._reconstruction_pipeline.set_correspondence_matcher(correspondence_estimator)
+
+        import time
+        start_time = time.time()
         self._reconstruction_pipeline.estimate_correspondences(min_search_space, max_search_space, set_size, iterations)
+        end_time = time.time()
+        print(f"Correspondence Estimation took: {(end_time-start_time):.3f}")
 
     def triangulate(self):
         min_search_space = float(
@@ -789,7 +834,7 @@ class Viewer(QWidget):
         vertex_attributes = {}
         if not "vertexColor" in vertex_attributes:
             vertex_attributes["vertexColor"] = np.tile(
-                np.array([1.0, 1.0, 0.0], dtype=np.float32), (super_point_cloud.shape[0], 1)
+                np.array([0.0, 0.0, 1.0], dtype=np.float32), (super_point_cloud.shape[0], 1)
             )
         faces = np.linspace(0, super_point_cloud.shape[0], num=super_point_cloud.shape[0], endpoint=False, dtype=np.int32)[:, np.newaxis]
         core_id = GlMeshCoreId()
@@ -867,7 +912,7 @@ class Viewer(QWidget):
             shader="wireframe",
             vertex_attributes={},
             face_attributes={},
-            uniforms={"lineColor": np.array([0.0, 1.0, 1.0])},
+            uniforms={"lineColor": np.array([0.0, 0.0, 1.0])},
         )
         self.controlpoints_instance_id = GlMeshInstanceId(prefab_id)
         self.viewer_widget.add_mesh_instance_(self.controlpoints_instance_id, np.eye(4))

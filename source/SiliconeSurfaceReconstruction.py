@@ -277,9 +277,9 @@ def controlPointBasedARAP(triangulatedPoints, camera, segmentator, zSubdivisions
         # Set Y Values to zero of the glottal outline points
         glottalOutlinePoints[:, 1] = 0.0
 
-        # Move vocal folds down a bit
         if flip_y:
             alignedPoints[:, 1] = -alignedPoints[:, 1]
+        
         alignedPoints -= np.array([[0.0, alignedPoints[:, 1].min()/2.0, 0.0]])
 
         # Split everything into left and right vocal fold

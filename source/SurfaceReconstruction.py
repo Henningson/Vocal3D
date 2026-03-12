@@ -244,7 +244,7 @@ def controlPointBasedARAP(triangulatedPoints, laser, images, camera, segmentator
         # Z-Coordinate of Plane Normal pointing in wrong direction?
         # Then flip normal
         if planeNormal[2] < 0:
-            planeNormal = -planeNormal
+           planeNormal = -planeNormal
 
         rotPlane = helper.rotateAlign(planeNormal/np.linalg.norm(planeNormal), np.array([0.0, 1.0, 0.0]))
 
