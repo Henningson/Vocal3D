@@ -208,9 +208,16 @@ def controlPointBasedARAP(triangulatedPoints, camera, segmentator, zSubdivisions
         t = helper.rayPlaneIntersectionMat(centroid, np.expand_dims(planeNormal, 0), np.zeros(glottalCameraRays.shape), glottalCameraRays) 
         glottalOutlinePoints = t * glottalCameraRays
 
+        xy, wh = segmentator.vocalfoldBoundingBox()
+        mesh_extents = torch.stack([xy, xy+wh]).detach().cpu().numpy()
+        meshCameraRays = camera.getRayMat(mesh_extents)
+        t = helper.rayPlaneIntersectionMat(centroid, np.expand_dims(planeNormal, 0), np.zeros(meshCameraRays.shape), meshCameraRays) 
+        meshExtentPoints = t * meshCameraRays
 
-        # Project Glottal Midline Extrema into Pointcloud
-        
+
+
+
+        # Project Glottal Midline Extrema into Pointcloud        
         upperMidLine, lowerMidLine = segmentator.glottalMidlines()[i]
 
         # Search for the next best midline if the computation didnt work.
@@ -235,6 +242,7 @@ def controlPointBasedARAP(triangulatedPoints, camera, segmentator, zSubdivisions
         glottalOutlinePoints = glottalOutlinePoints - centroid
         gml_point1 = np.expand_dims(gml_point1, 0) - centroid
         gml_point2 = np.expand_dims(gml_point2, 0) - centroid
+        meshExtentPoints = meshExtentPoints - centroid
 
         # Compute rotation matrix, aligning the plane normal to the +Y Axis
         rotPlane = helper.rotateAlign(planeNormal/np.linalg.norm(planeNormal), np.array([0.0, 1.0, 0.0]))
@@ -244,6 +252,7 @@ def controlPointBasedARAP(triangulatedPoints, camera, segmentator, zSubdivisions
         glottalOutlinePoints = np.matmul(rotPlane, glottalOutlinePoints.T).T
         gml_point1 = np.matmul(rotPlane, gml_point1.T).T
         gml_point2 = np.matmul(rotPlane, gml_point2.T).T
+        meshExtentPoints = np.matmul(rotPlane, meshExtentPoints.T).T
 
 
 
@@ -258,6 +267,7 @@ def controlPointBasedARAP(triangulatedPoints, camera, segmentator, zSubdivisions
         gml_point1 = rotateX(gml_point1, -gmplAngle, deg=False)
         gml_point2 = rotateX(gml_point2, -gmplAngle, deg=False)
         glottalOutlinePoints = rotateX(glottalOutlinePoints, -gmplAngle, deg=False)
+        meshExtentPoints = rotateX(meshExtentPoints, -gmplAngle, deg=False)
 
 
         # Move everything, such that the glottal midlie lies directly ontop the Z Axus
@@ -266,16 +276,19 @@ def controlPointBasedARAP(triangulatedPoints, camera, segmentator, zSubdivisions
         gml_point1 -= np.array([[0.0, 0.0, zOffset]])
         gml_point2 -= np.array([[0.0, 0.0, zOffset]])
         glottalOutlinePoints -= np.array([0.0, 0.0, zOffset])
+        meshExtentPoints -= np.array([0.0, 0.0, zOffset])
 
         # Rotate everything around by 90 degrees again
         alignedPoints = rotateX(alignedPoints, -90).astype(np.float)
         gml_point1 = rotateX(gml_point1, -90).astype(np.float)
         gml_point2 = rotateX(gml_point2, -90).astype(np.float)
         glottalOutlinePoints = rotateX(glottalOutlinePoints, -90).astype(np.float)
+        meshExtentPoints = rotateX(meshExtentPoints, -90).astype(np.float)
 
 
         # Set Y Values to zero of the glottal outline points
         glottalOutlinePoints[:, 1] = 0.0
+        meshExtentPoints[:, 1] = 0.0
 
         if flip_y:
             alignedPoints[:, 1] = -alignedPoints[:, 1]
@@ -294,7 +307,7 @@ def controlPointBasedARAP(triangulatedPoints, camera, segmentator, zSubdivisions
 
         # Find X-Y-Z Extent of Vocalfolds to generate fitting M5 Model
         if first:
-            minX, maxX, minY, maxY, minZ, maxZ = findXYZExtent(aligned)
+            minX, maxX, minY, maxY, minZ, maxZ = findXYZExtent(meshExtentPoints)
             first = False
 
             # Generate M5 Model for left and right vocalfold

@@ -16,6 +16,8 @@ class BaseSegmentator:
         # List of 2x2 points
         self.glottalMidlines = list()
 
+        self.vocalfoldOutlines = list()
+
         # List of extracted local Maxima
         self.localMaxima = list()
 
@@ -42,6 +44,24 @@ class BaseSegmentator:
 
     def getSegmentation(self, index):
         return self.segmentations[index]
+
+    def computeVocalfoldOutline(self, index):
+        segmentation = self.segmentations[index]
+        contours, hierarchy = cv2.findContours(segmentation, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+        i = 0
+        contour_points = list()
+        while (i != -1):
+            contour_points.append(contours[hierarchy[0][i][0]][:, 0, :])
+            i = hierarchy[0][i][0]
+
+        contourArray = None
+        if len(contour_points) > 1:
+            contourArray = np.concatenate(contour_points, axis=0)
+        else:
+            contourArray = contour_points[0]
+        return contourArray - np.ones(contourArray.shape)
+
 
     def computeGlottalOutline(self, index):
         segmentation = self.segmentations[index]

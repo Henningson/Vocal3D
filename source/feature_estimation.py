@@ -310,6 +310,8 @@ class NeuralFeatureEstimator(FeatureEstimator):
 
         self._glottal_midlines = []
 
+        self._vocalfold_bounding_box = None
+
         num_frames = video.shape[0]
         # video_clone = (video.clone().unsqueeze(1).float() / 255).repeat(1, 3, 1, 1)
         batch_size = 8
@@ -367,11 +369,15 @@ class NeuralFeatureEstimator(FeatureEstimator):
 
                     glottal_roi = torch.zeros(label.shape, device=labels.device)
                     x, y, w, h = sorted_stats[-2][1]
+
+                    if self._vocalfold_bounding_box is None:
+                        self._vocalfold_bounding_box = [torch.tensor([x, y]), torch.tensor([w, h])]
+
+
                     glottal_roi[y:y+h, x:x+w] = 1
                     wat.append(glottal_roi)
                 wat = torch.stack(wat)
                 labels = labels * wat
-
 
                 end_event_nn.record()
                 self._laserpoint_segmentations[i:i+batch_size] = (labels == 3) * 1

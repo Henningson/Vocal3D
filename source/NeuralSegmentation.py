@@ -254,6 +254,8 @@ class NeuralSegmentator(BaseSegmentator):
 
         self.generateSegmentationData()
 
+        self.vocalfold_extents = None
+
 
     def class_to_color(self, prediction, class_colors):
         prediction = np.expand_dims(prediction, 1)
@@ -266,6 +268,7 @@ class NeuralSegmentator(BaseSegmentator):
             output += segment.astype(np.uint8)
 
         return output
+
 
     def segmentImage(self, frame):
         segmentation = self.model(torch.from_numpy(frame).unsqueeze(0).unsqueeze(0).to(DEVICE).float()).argmax(dim=1).detach().cpu().numpy().squeeze().astype(np.uint8)
@@ -281,6 +284,21 @@ class NeuralSegmentator(BaseSegmentator):
 
         glottal_roi = np.zeros(segmentation.shape, np.uint8)
         x, y, w, h = sorted_stats[-2][1]
+        
+        if self.vocalfold_extents is None:
+            self.vocalfold_extents = [x, y, w, h]
+        else:
+            px, py, ph, pw = self.vocalfold_extents
+
+            # Convert to corner coordinates
+            x1 = min(px, x)
+            y1 = min(py, y)
+            x2 = max(px + pw, x + w)
+            y2 = max(py + ph, y + h)
+
+            # Store union box
+            self.vocalfold_extents = [x1, y1, x2 - x1, y2 - y1]
+
         glottal_roi[y:y+h, x:x+w] = 1
         filtered_glottis = ((segmentation == 2) * 255 * glottal_roi).astype(np.uint8)
 
@@ -301,22 +319,10 @@ class NeuralSegmentator(BaseSegmentator):
         
         return maxima
 
+
+
     def generateROI(self):
-        minX = 0
-        maxX = 0
-        minY = 0
-        maxY = 0
-
-        for laserdotSegmentation in self.laserdotSegmentations:
-            ys, xs = np.nonzero(laserdotSegmentation)
-
-            maxY = np.max(ys)
-            minY = np.min(ys)
-            maxX = np.max(xs)
-            minX = np.min(xs)
-
-
-        return [minX, maxX-minX, minY, maxY-minY]
+        return self.vocalfold_extents
 
 
     def estimateClosedGlottis(self):
